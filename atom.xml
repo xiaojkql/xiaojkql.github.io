@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Hexo</title>
+  
+  
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="http://yoursite.com/"/>
+  <updated>2020-06-20T06:10:27.667Z</updated>
+  <id>http://yoursite.com/</id>
+  
+  <author>
+    <name>John Doe</name>
+    
+  </author>
+  
+  <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>hexo搭建博客系统</title>
+    <link href="http://yoursite.com/2020/06/20/machine/first/"/>
+    <id>http://yoursite.com/2020/06/20/machine/first/</id>
+    <published>2020-06-20T06:09:04.518Z</published>
+    <updated>2020-06-20T06:10:27.667Z</updated>
+    
+    <content type="html"><![CDATA[<h1 id="1-嗯哼"><a href="#1-嗯哼" class="headerlink" title="1 嗯哼"></a>1 嗯哼</h1><p>健身房里发生</p><h1 id="2-啊哈"><a href="#2-啊哈" class="headerlink" title="2 啊哈"></a>2 啊哈</h1><p>放松放松</p><h2 id="2-1-后端数据看"><a href="#2-1-后端数据看" class="headerlink" title="2.1 后端数据看"></a>2.1 后端数据看</h2><p>废旧塑料福克斯</p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h1 id=&quot;1-嗯哼&quot;&gt;&lt;a href=&quot;#1-嗯哼&quot; class=&quot;headerlink&quot; title=&quot;1 嗯哼&quot;&gt;&lt;/a&gt;1 嗯哼&lt;/h1&gt;&lt;p&gt;健身房里发生&lt;/p&gt;
+&lt;h1 id=&quot;2-啊哈&quot;&gt;&lt;a href=&quot;#2-啊哈&quot; class=&quot;headerlink&quot; ti
+      
+    
+    </summary>
+    
+    
+      <category term="hexo" scheme="http://yoursite.com/categories/hexo/"/>
+    
+    
+      <category term="hexo" scheme="http://yoursite.com/tags/hexo/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>hexo搭建博客系统</title>
+    <link href="http://yoursite.com/2020/06/20/hello-world/"/>
+    <id>http://yoursite.com/2020/06/20/hello-world/</id>
+    <published>2020-06-20T05:40:15.178Z</published>
+    <updated>2020-06-20T06:07:34.286Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="1-基本操作"><a href="#1-基本操作" class="headerlink" title="1 基本操作"></a>1 基本操作</h2><p>hexo init<br>hexo clean<br>hexo g<br>hexo s<br>hexo d</p><h2 id="2-主题"><a href="#2-主题" class="headerlink" title="2 主题"></a>2 主题</h2><p><a href="https://github.com/cofess/hexo-theme-pure" target="_blank" rel="noopener">参考</a></p><h3 id="2-1-分类与标签页"><a href="#2-1-分类与标签页" class="headerlink" title="2-1 分类与标签页"></a>2-1 分类与标签页</h3><p>hexo new page “tags”<br>在index.md中添加<br>layout: “tags”</p><p>hexo new page “categories”<br>在index.md中添加<br>layout: “categories”</p><h3 id="2-2-打赏设置"><a href="#2-2-打赏设置" class="headerlink" title="2-2 打赏设置"></a>2-2 打赏设置</h3><p>主题配置文件中设置<br>donate:<br>​    enable: false<br>​    </p><h3 id="2-3-设置个人信息"><a href="#2-3-设置个人信息" class="headerlink" title="2-3 设置个人信息"></a>2-3 设置个人信息</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">MyFirst</span></span>&#123;</span><br><span class="line">    String name;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> age;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h2 id=&quot;1-基本操作&quot;&gt;&lt;a href=&quot;#1-基本操作&quot; class=&quot;headerlink&quot; title=&quot;1 基本操作&quot;&gt;&lt;/a&gt;1 基本操作&lt;/h2&gt;&lt;p&gt;hexo init&lt;br&gt;hexo clean&lt;br&gt;hexo g&lt;br&gt;hexo s&lt;br&gt;hexo d&lt;
+      
+    
+    </summary>
+    
+    
+      <category term="hexo" scheme="http://yoursite.com/categories/hexo/"/>
+    
+    
+      <category term="hexo" scheme="http://yoursite.com/tags/hexo/"/>
+    
+  </entry>
+  
+</feed>
