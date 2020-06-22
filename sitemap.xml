@@ -2,9 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>http://yoursite.com/about/index.html</loc>
+    
+    <lastmod>2020-06-22T11:19:08.925Z</lastmod>
+    
+  </url>
+  
+  <url>
     <loc>http://yoursite.com/2020/06/20/machine/first/</loc>
     
-    <lastmod>2020-06-20T06:10:27.667Z</lastmod>
+    <lastmod>2020-06-20T06:13:56.685Z</lastmod>
     
   </url>
   
@@ -47,13 +54,6 @@
     <loc>http://yoursite.com/books/index.html</loc>
     
     <lastmod>2020-06-20T05:41:11.962Z</lastmod>
-    
-  </url>
-  
-  <url>
-    <loc>http://yoursite.com/about/index.html</loc>
-    
-    <lastmod>2020-06-20T05:41:11.960Z</lastmod>
     
   </url>
   
