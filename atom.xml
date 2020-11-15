@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://yoursite.com/"/>
-  <updated>2020-06-20T06:13:56.685Z</updated>
+  <updated>2020-11-15T03:50:40.616Z</updated>
   <id>http://yoursite.com/</id>
   
   <author>
@@ -15,6 +15,34 @@
   </author>
   
   <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Resource基本用法</title>
+    <link href="http://yoursite.com/2020/11/15/java-basic/Resource-basic/"/>
+    <id>http://yoursite.com/2020/11/15/java-basic/Resource-basic/</id>
+    <published>2020-11-15T03:49:03.643Z</published>
+    <updated>2020-11-15T03:50:40.616Z</updated>
+    
+    <content type="html"><![CDATA[<h1 id="1-Resource的基本用法"><a href="#1-Resource的基本用法" class="headerlink" title="1 Resource的基本用法"></a>1 Resource的基本用法</h1>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h1 id=&quot;1-Resource的基本用法&quot;&gt;&lt;a href=&quot;#1-Resource的基本用法&quot; class=&quot;headerlink&quot; title=&quot;1 Resource的基本用法&quot;&gt;&lt;/a&gt;1 Resource的基本用法&lt;/h1&gt;
+      
+    
+    </summary>
+    
+    
+      <category term="java-basic" scheme="http://yoursite.com/categories/java-basic/"/>
+    
+    
+      <category term="java" scheme="http://yoursite.com/tags/java/"/>
+    
+      <category term="basic" scheme="http://yoursite.com/tags/basic/"/>
+    
+  </entry>
   
   <entry>
     <title>hexo搭建博客系统</title>
