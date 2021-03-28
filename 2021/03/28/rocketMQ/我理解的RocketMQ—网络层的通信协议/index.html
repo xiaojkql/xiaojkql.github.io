@@ -25,15 +25,15 @@
 <meta property="og:site_name" content="Hexo">
 <meta property="og:description" content="1 概述如下图所示，业务层与Netty客户端之间用RemotingCommand进行交互，即业务层调用Netty发送消息时，会将消息封装在RemotingCommand对象里面，而Netty接收到外部消息的时候会给业务层返回RemotingCommand的对象实例。 Netty与外部世界通过字节流进行传输。Netty在发送消息的时候，对RemotingCommand进行编码（对象–&gt;字节流）">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/RemotingCommand.png">
-<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/CommandCustomHeader.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210117180405557.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210117180347266.png#pic_center">
 <meta property="article:published_time" content="2021-03-28T04:55:02.990Z">
-<meta property="article:modified_time" content="2021-03-28T04:57:08.627Z">
+<meta property="article:modified_time" content="2021-03-28T05:02:28.296Z">
 <meta property="article:author" content="John Doe">
 <meta property="article:tag" content="java">
 <meta property="article:tag" content="RocketMQ">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/RemotingCommand.png">
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/20210117180405557.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
   <!-- Canonical links -->
   <link rel="canonical" href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/index.html">
   
@@ -429,7 +429,7 @@
       
         <h2 id="1-概述"><a href="#1-概述" class="headerlink" title="1 概述"></a>1 概述</h2><p>如下图所示，业务层与Netty客户端之间用<code>RemotingCommand</code>进行交互，即业务层调用Netty发送消息时，会将消息封装在<code>RemotingCommand</code>对象里面，而Netty接收到外部消息的时候会给业务层返回<code>RemotingCommand</code>的对象实例。</p>
 <p>Netty与外部世界通过字节流进行传输。Netty在发送消息的时候，对RemotingCommand进行编码（对象–&gt;字节流）；在接收到外部消息的时候会对字节流进行解码（字节流–&gt;对象）。</p>
-<p><img src="./image/RemotingCommand.png" alt=""></p>
+<p><img src="https://img-blog.csdnimg.cn/20210117180405557.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述"></p>
 <p>业务层与Netty之间交互方式的伪代码：</p>
 <ul>
 <li>准备消息头，CommandCustomHeader，“通信协议”，不同场景下，例如发送消息和请求消息，携带的信息不一样。约定好的协议。</li>
@@ -472,8 +472,7 @@
 <h2 id="5-通信协议"><a href="#5-通信协议" class="headerlink" title="5 通信协议"></a>5 通信协议</h2><p>在传递消息的时候会创建一个协议头customeHeader，不同场景下会使用不同的协议头。</p>
 <p>协议头都实现了一个公共的接口<code>CommandCustomHeader</code>。它的实现者有很多。</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">interface</span> <span class="title">CommandCustomHeader</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">checkFields</span><span class="params">()</span> <span class="keyword">throws</span> RemotingCommandException</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p><img src="image/CommandCustomHeader.png" alt=""></p>
+<p><img src="https://img-blog.csdnimg.cn/20210117180347266.png#pic_center" alt="在这里插入图片描述"></p>
 
       
     </div>
