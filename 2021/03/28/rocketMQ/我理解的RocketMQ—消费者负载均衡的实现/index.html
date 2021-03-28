@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+  <meta charset="utf-8">
+  
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="Cache-Control" content="no-transform" />
+  <meta http-equiv="Cache-Control" content="no-siteapp" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="format-detection" content="telephone=no,email=no,adress=no">
+  <!-- Color theme for statusbar -->
+  <meta name="theme-color" content="#000000" />
+  <!-- 强制页面在当前窗口以独立页面显示,防止别人在框架里调用页面 -->
+  <meta http-equiv="window-target" content="_top" />
+  
+  
+  <title>我理解的RocketMQ—消费者负载均衡的实现 | xiaojkql</title>
+  <meta name="description" content="1 负载均衡实现组件分析1.1 负载均衡整体概述 概述所谓的负载均衡指的就是，在集群消费模式下，一个消费组里面有多个消费者订阅了一个主题，此主题有多个消息队列(MessageQueue)，负载均衡组件就将这些消息队列平均分给消费组里面的消费者。  使用注意点同一个消费组内的消费者要保持一样主题订阅，否则会导致某些消费队列没有消费者进行消费。  组件分析（核心类和策略类）负载均衡只对集群消费模式的消">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我理解的RocketMQ—消费者负载均衡的实现">
+<meta property="og:url" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1 负载均衡实现组件分析1.1 负载均衡整体概述 概述所谓的负载均衡指的就是，在集群消费模式下，一个消费组里面有多个消费者订阅了一个主题，此主题有多个消息队列(MessageQueue)，负载均衡组件就将这些消息队列平均分给消费组里面的消费者。  使用注意点同一个消费组内的消费者要保持一样主题订阅，否则会导致某些消费队列没有消费者进行消费。  组件分析（核心类和策略类）负载均衡只对集群消费模式的消">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/RebalancePushImpl.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/mqrebalancerel.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/rebalance_sequnce.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/RebalanceService.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/rebalance.png">
+<meta property="article:published_time" content="2021-03-28T04:55:02.995Z">
+<meta property="article:modified_time" content="2021-03-28T04:56:41.272Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="RocketMQ">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/image/RebalancePushImpl.png">
+  <!-- Canonical links -->
+  <link rel="canonical" href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/index.html">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png" type="image/x-icon">
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+  
+  
+    <link href="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.css" rel="stylesheet">
+  
+  
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.css">
+  
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+
+<body class="main-center" itemscope itemtype="http://schema.org/WebPage">
+  <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+  <div class="slimContent">
+    <div class="navbar-header">
+      
+      
+      <div class="profile-block text-center">
+        <a id="avatar" href="https://github.com/xiaojkql" target="_blank">
+          <img class="img-circle img-rotate" src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" width="200" height="200">
+        </a>
+        <h2 id="name" class="hidden-xs hidden-sm">覃缘</h2>
+        <h3 id="title" class="hidden-xs hidden-sm hidden-md">Java开发工程师</h3>
+        <small id="location" class="text-muted hidden-xs hidden-sm"><i class="icon icon-map-marker"></i> Shenzhen, China</small>
+      </div>
+      
+      <div class="search" id="search-form-wrap">
+
+    <form class="search-form sidebar-form">
+        <div class="input-group">
+            <input type="text" class="search-form-input form-control" placeholder="搜索" />
+            <span class="input-group-btn">
+                <button type="submit" class="search-form-submit btn btn-flat" onclick="return false;"><i class="icon icon-search"></i></button>
+            </span>
+        </div>
+    </form>
+    <div class="ins-search">
+  <div class="ins-search-mask"></div>
+  <div class="ins-search-container">
+    <div class="ins-input-wrapper">
+      <input type="text" class="ins-search-input" placeholder="想要查找什么..." x-webkit-speech />
+      <button type="button" class="close ins-close ins-selectable" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+    </div>
+    <div class="ins-section-wrapper">
+      <div class="ins-section-container"></div>
+    </div>
+  </div>
+</div>
+
+
+</div>
+      <button class="navbar-toggle collapsed" type="button" data-toggle="collapse" data-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <nav id="main-navbar" class="collapse navbar-collapse" itemscope itemtype="http://schema.org/SiteNavigationElement" role="navigation">
+      <ul class="nav navbar-nav main-nav ">
+        
+        
+        <li class="menu-item menu-item-home">
+          <a href="/.">
+            
+            <i class="icon icon-home-fill"></i>
+            
+            <span class="menu-title">首页</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives">
+            
+            <i class="icon icon-archives-fill"></i>
+            
+            <span class="menu-title">归档</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories">
+            
+            <i class="icon icon-folder"></i>
+            
+            <span class="menu-title">分类</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags">
+            
+            <i class="icon icon-tags"></i>
+            
+            <span class="menu-title">标签</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-books">
+          <a href="/books">
+            
+            <i class="icon icon-book-fill"></i>
+            
+            <span class="menu-title">书单</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about">
+            
+            <i class="icon icon-cup-fill"></i>
+            
+            <span class="menu-title">关于</span>
+          </a>
+        </li>
+        
+      </ul>
+      
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    </nav>
+  </div>
+</header>
+
+  
+    <aside class="sidebar" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    
+      <div class="widget">
+    <h3 class="widget-title">公告</h3>
+    <div class="widget-body">
+        <div id="board">
+            <div class="content">
+                <p>欢迎交流与分享经验!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget-body">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/RocketMQ/">RocketMQ</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/hexo/">hexo</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/java-basic/">java-basic</a><span class="category-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget-body">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/basic/" rel="tag">basic</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/hexo/" rel="tag">hexo</a><span class="tag-list-count">2</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/java/" rel="tag">java</a><span class="tag-list-count">6</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget-body tagcloud">
+      <a href="/tags/RocketMQ/" style="font-size: 13.67px;">RocketMQ</a> <a href="/tags/basic/" style="font-size: 13px;">basic</a> <a href="/tags/hexo/" style="font-size: 13.33px;">hexo</a> <a href="/tags/java/" style="font-size: 14px;">java</a>
+    </div>
+  </div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget-body">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/03/">三月 2021</a><span class="archive-list-count">4</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/01/">一月 2021</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/11/">十一月 2020</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/06/">六月 2020</a><span class="archive-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget-body">
+      <ul class="recent-post-list list-unstyled ">
+        
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ—消息偏移量管理分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:03.000Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="title">我理解的RocketMQ—消费者负载均衡的实现</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.995Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="title">我理解的RocketMQ—网络层的通信协议</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.990Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ-同步发送消息源码分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.981Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ：主从复制HA(high availability)的机制分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-01-16T16:58:50.829Z" itemprop="datePublished">2021-01-17</time>
+              </p>
+            </div>
+          </li>
+          
+      </ul>
+    </div>
+  </div>
+  
+
+    
+  </div>
+</aside>
+
+  
+  
+<aside class="sidebar sidebar-toc collapse" id="collapseToc" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    <nav id="toc" class="article-toc">
+      <h3 class="toc-title">文章目录</h3>
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-负载均衡实现组件分析"><span class="toc-number">1.</span> <span class="toc-text">1 负载均衡实现组件分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-负载均衡整体概述"><span class="toc-number">1.1.</span> <span class="toc-text">1.1 负载均衡整体概述</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-2-一次负载均衡的流程分析"><span class="toc-number">1.2.</span> <span class="toc-text">1.2 一次负载均衡的流程分析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-消费者组使用负载均衡组件"><span class="toc-number">2.</span> <span class="toc-text">2 消费者组使用负载均衡组件</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-RebalanceService是什么？"><span class="toc-number">2.1.</span> <span class="toc-text">2.1 RebalanceService是什么？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-RebalanceService的运行时，执行的代码体是什么"><span class="toc-number">2.2.</span> <span class="toc-text">2.2 RebalanceService的运行时，执行的代码体是什么?</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3-负载均衡函数调用分析"><span class="toc-number">2.3.</span> <span class="toc-text">2.3 负载均衡函数调用分析</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-4-更新主题消息队列"><span class="toc-number">2.4.</span> <span class="toc-text">2.4 更新主题消息队列</span></a></li></ol></li></ol>
+    </nav>
+  </div>
+</aside>
+
+<main class="main" role="main">
+  <div class="content">
+  <article id="post-rocketMQ/我理解的RocketMQ—消费者负载均衡的实现" class="article article-type-post" itemscope itemtype="http://schema.org/BlogPosting">
+    
+    <div class="article-header">
+      
+        
+  
+    <h1 class="article-title" itemprop="name">
+      我理解的RocketMQ—消费者负载均衡的实现
+    </h1>
+  
+
+      
+      <div class="article-meta">
+        <span class="article-date">
+    <i class="icon icon-calendar-check"></i>
+	<a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="article-date">
+	  <time datetime="2021-03-28T04:55:02.995Z" itemprop="datePublished">2021-03-28</time>
+	</a>
+</span>
+        
+  <span class="article-category">
+    <i class="icon icon-folder"></i>
+    <a class="article-category-link" href="/categories/RocketMQ/">RocketMQ</a>
+  </span>
+
+        
+  <span class="article-tag">
+    <i class="icon icon-tags"></i>
+	<a class="article-tag-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a>, <a class="article-tag-link" href="/tags/java/" rel="tag">java</a>
+  </span>
+
+
+        
+
+        <span class="post-comment"><i class="icon icon-comment"></i> <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/#comments" class="article-comment-link">评论</a></span>
+        
+      </div>
+    </div>
+    <div class="article-entry marked-body" itemprop="articleBody">
+      
+        <h2 id="1-负载均衡实现组件分析"><a href="#1-负载均衡实现组件分析" class="headerlink" title="1 负载均衡实现组件分析"></a>1 负载均衡实现组件分析</h2><h3 id="1-1-负载均衡整体概述"><a href="#1-1-负载均衡整体概述" class="headerlink" title="1.1 负载均衡整体概述"></a>1.1 负载均衡整体概述</h3><ul>
+<li><p><strong>概述</strong><br>所谓的负载均衡指的就是，在集群消费模式下，一个消费组里面有多个消费者订阅了一个主题，此主题有多个消息队列(<code>MessageQueue</code>)，负载均衡组件就将这些消息队列平均分给消费组里面的消费者。</p>
+</li>
+<li><p><strong>使用注意点</strong><br>同一个消费组内的消费者要保持一样主题订阅，否则会导致某些消费队列没有消费者进行消费。</p>
+</li>
+<li><p><strong>组件分析</strong>（核心类和策略类）<br>负载均衡只对集群消费模式的消费者有效，对广播模式的消费者无效的。<code>RocketMQ</code>的负载均衡是在消费者客户端完成的。<br>首先抛开其他复杂的关系调用，逻辑，单纯的从负载均衡实现组件上来分析。负载均衡的组件中是<code>RebalanceImpl</code>这个抽象类，它的实现者有<code>RebalancePushImpl</code>、<code>RebalanceLitePullImpl</code>、<code>RebalancePullImpl</code>分别供几个消费者客户端使用。下图是类结构图。</p>
+</li>
+</ul>
+<p><img src="image/RebalancePushImpl.png" alt=""></p>
+<p>抽象类中有一个重要的方法<code>doRebalance()</code>，这个方法是对外使用的。即使用的方式就是创建一个负载均衡实现类的实例，然后调用它的doRebalance()方法即可进行。</p>
+<h3 id="1-2-一次负载均衡的流程分析"><a href="#1-2-一次负载均衡的流程分析" class="headerlink" title="1.2 一次负载均衡的流程分析"></a>1.2 一次负载均衡的流程分析</h3><p>干的核心事情：</p>
+<ul>
+<li><p>将主题的消息队列应用分配策略分配到消费组里面的消费者</p>
+</li>
+<li><p>丢弃删减的消息队列对应的ProcessQueue，创建新增的消息队列的PullRequest和ProcessQueue。这些动作与消费者拉取消息消费相关。</p>
+</li>
+</ul>
+<p>主要流程说明：</p>
+<ul>
+<li><p>1 从<code>ConcurrentMap&lt;String/*主题*/, Set&lt;MessageQueue&gt; /*主题的消息队列*/&gt; topicSubscribeInfoTable</code>这个map中获取主题对应的<code>MessageQueue</code>集合，这个map会被一个定时任务（定时的从NameServer获取已订阅主题的路由信息）进行更新；<strong>主题的消息队列集合</strong></p>
+</li>
+<li><p>2 获取该消费者所属消费者组下的所有消费者集合；<strong>消费者集合</strong></p>
+</li>
+<li><p>3 将消息队列集合和消费者集合按照某个分配策略进行分配；</p>
+</li>
+<li><p>4 分配策略完成分配，当前消费者获得新的消费队列集合或者删减了某些消息队列，接下来将新的消费队列和旧的进行对比</p>
+</li>
+<li><p>5 如果消费者分配到了一个之前没有的mq，那么将会创建一个PullRequest给PullMessageService实现对消息的拉取，如果之前有但是现在没有的那么将会调用里面的ProcessQueue的droped方法来销毁，即不再拉取消息。其中创建新的PullRequest将会计算一次消息拉取偏移量<code>this.computePullFromWhere(mq);</code></p>
+</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">doRebalance</span><span class="params">(<span class="keyword">final</span> <span class="keyword">boolean</span> isOrder)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取订阅数据</span></span><br><span class="line">    Map&lt;String, SubscriptionData&gt; subTable = <span class="keyword">this</span>.getSubscriptionInner();</span><br><span class="line">    <span class="comment">// 遍历订阅数据</span></span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">final</span> Map.Entry&lt;String, SubscriptionData&gt; entry : subTable.entrySet()) &#123;</span><br><span class="line">            <span class="comment">// 获取主题</span></span><br><span class="line">            <span class="keyword">final</span> String topic = entry.getKey();</span><br><span class="line">            <span class="comment">// 根据主题进行负载均衡</span></span><br><span class="line">            <span class="keyword">this</span>.rebalanceByTopic(topic, isOrder);</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line">    <span class="keyword">this</span>.truncateMessageQueueNotMyTopic();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">rebalanceByTopic</span><span class="params">(<span class="keyword">final</span> String topic, <span class="keyword">final</span> <span class="keyword">boolean</span> isOrder)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">switch</span> (messageModel) &#123;</span><br><span class="line">        <span class="keyword">case</span> BROADCASTING: &#123;</span><br><span class="line">            ...</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">case</span> CLUSTERING: &#123;</span><br><span class="line">            <span class="comment">// 同样是先获取主题对应的消息队列列表</span></span><br><span class="line">            <span class="comment">// 这个map是会被一个从NameServer拉取路由信息来更新的</span></span><br><span class="line">            Set&lt;MessageQueue&gt; mqSet = <span class="keyword">this</span>.topicSubscribeInfoTable.get(topic);</span><br><span class="line">            <span class="comment">// 找到主题对应的该消费组内所有的消费者ID</span></span><br><span class="line">            List&lt;String&gt; cidAll = <span class="keyword">this</span>.mQClientFactory.findConsumerIdList(topic, consumerGroup);</span><br><span class="line">            <span class="keyword">if</span> (mqSet != <span class="keyword">null</span> &amp;&amp; cidAll != <span class="keyword">null</span>) &#123;</span><br><span class="line">                List&lt;MessageQueue&gt; mqAll = <span class="keyword">new</span> ArrayList&lt;MessageQueue&gt;();</span><br><span class="line">                mqAll.addAll(mqSet);</span><br><span class="line">                AllocateMessageQueueStrategy strategy = <span class="keyword">this</span>.allocateMessageQueueStrategy;</span><br><span class="line">                List&lt;MessageQueue&gt; allocateResult = <span class="keyword">null</span>;</span><br><span class="line">                        <span class="comment">// 调用具体的负载均衡策略进行负载</span></span><br><span class="line">                    <span class="comment">// 负载的含义：将该主题的mq在该消费组的所有的消费者进行分配</span></span><br><span class="line">                    allocateResult = strategy.allocate(</span><br><span class="line">                            <span class="keyword">this</span>.consumerGroup,</span><br><span class="line">                            <span class="keyword">this</span>.mQClientFactory.getClientId(),</span><br><span class="line">                            mqAll,</span><br><span class="line">                            cidAll);</span><br><span class="line"></span><br><span class="line">            Set&lt;MessageQueue&gt; allocateResultSet = <span class="keyword">new</span> HashSet&lt;MessageQueue&gt;();</span><br><span class="line">            <span class="keyword">if</span> (allocateResult != <span class="keyword">null</span>) &#123;</span><br><span class="line">                allocateResultSet.addAll(allocateResult);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 看当前主题当前消费者的分配到的mq是否变化了</span></span><br><span class="line">            <span class="comment">// 下面这个函数很重要，如果消费者分配到了一个之前没有的mq，那么将会创建一个PullRequest给PullMessageService实现对消息的拉取，如果之前有但是现在没有的那么将会调用里面的ProcessQueue的droped方法来销毁，即不再拉取消息。</span></span><br><span class="line">            <span class="keyword">boolean</span> changed = <span class="keyword">this</span>.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);</span><br><span class="line">            <span class="keyword">if</span> (changed) &#123;</span><br><span class="line">                log.info(</span><br><span class="line">                        <span class="string">"rebalanced result changed. allocateMessageQueueStrategyName=&#123;&#125;, group=&#123;&#125;, topic=&#123;&#125;, clientId=&#123;&#125;, mqAllSize=&#123;&#125;, cidAllSize=&#123;&#125;, rebalanceResultSize=&#123;&#125;, rebalanceResultSet=&#123;&#125;"</span>,</span><br><span class="line">                        strategy.getName(), consumerGroup, topic, <span class="keyword">this</span>.mQClientFactory.getClientId(), mqSet.size(), cidAll.size(),</span><br><span class="line">                        allocateResultSet.size(), allocateResultSet);</span><br><span class="line">                <span class="keyword">this</span>.messageQueueChanged(topic, mqSet, allocateResultSet);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">        </span><br><span class="line">&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="2-消费者组使用负载均衡组件"><a href="#2-消费者组使用负载均衡组件" class="headerlink" title="2 消费者组使用负载均衡组件"></a>2 消费者组使用负载均衡组件</h2><p><strong>关系说明</strong>：在MQClientInstance“客户端实例工厂”里面维护了一个负载均衡后台服务线程<code>RebalanceService</code>。它里面还维护了一个消费者组–&gt;消费者内部客户端实例这样的一个map。每个消费者内部客户端里面维护了一个负载均衡实现类。如下图所示</p>
+<p><img src="./image/mqrebalancerel.png" alt=""></p>
+<p><strong>调用流程</strong>：rebalanceService服务线程的<code>run()</code>方法调用<code>MQClientInstance</code>的<code>doRebalance()</code>，在此方法或遍历消费者组–&gt;消费者内部客户端这个map，并调用每个消费者内部客户端的<code>doRebalance()</code>，此方法会调用负载均衡组件的<code>doRebalance(...)</code>方法。</p>
+<p><img src="./image/rebalance_sequnce.png" alt=""></p>
+<p>负载均衡的后台服务线程在MQ的客户端<code>MQClientInstance</code>启动的，它有一个成员变量</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">MQClientInstance</span> </span>&#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> RebalanceService rebalanceService;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>赋初值是在它的构造函数中</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">MQClientInstance</span><span class="params">(ClientConfig clientConfig, <span class="keyword">int</span> instanceIndex, String clientId, RPCHook rpcHook)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">this</span>.rebalanceService = <span class="keyword">new</span> RebalanceService(<span class="keyword">this</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>负载均衡的启动是在它的start()方法中，调用了<code>RebalanceService</code>的<code>start()</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">start</span><span class="params">()</span> <span class="keyword">throws</span> MQClientException </span>&#123;</span><br><span class="line">                <span class="keyword">this</span>.rebalanceService.start();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>定时的负载均衡就在RebalanceService中实现了。<br>下面从几个问题出发来分析其中的机制</p>
+<h3 id="2-1-RebalanceService是什么？"><a href="#2-1-RebalanceService是什么？" class="headerlink" title="2.1 RebalanceService是什么？"></a>2.1 RebalanceService是什么？</h3><p>它的类结构图如下，可以看到它继承自<code>ServiceThread</code>抽象类，属于<code>RocketMQ</code>中典型的创建后台服务线程运行方式，可参考RocketMQ中服务线程的分析。只要启动RebalanceService，它就会一直在后台运行，不会停，相当于一个定时任务。</p>
+<p><img src="image/RebalanceService.png" alt=""></p>
+<h3 id="2-2-RebalanceService的运行时，执行的代码体是什么"><a href="#2-2-RebalanceService的运行时，执行的代码体是什么" class="headerlink" title="2.2 RebalanceService的运行时，执行的代码体是什么?"></a>2.2 RebalanceService的运行时，执行的代码体是什么?</h3><p>下面是RebalanceService中<code>run()</code>方法体</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    log.info(<span class="keyword">this</span>.getServiceName() + <span class="string">" service started"</span>);</span><br><span class="line">    <span class="comment">// 典型的线程设计方式，用一个volatile变量来控制线程的运行</span></span><br><span class="line">    <span class="keyword">while</span> (!<span class="keyword">this</span>.isStopped()) &#123;</span><br><span class="line">        <span class="comment">// 在这儿进行了等待，等待一定的时间，相当于定时</span></span><br><span class="line">        <span class="keyword">this</span>.waitForRunning(waitInterval);</span><br><span class="line">        <span class="comment">// 被唤醒了执行真正的负载均衡【重要，下面这个调用即是执行负载均衡】</span></span><br><span class="line">        <span class="keyword">this</span>.mqClientFactory.doRebalance();</span><br><span class="line">    &#125;</span><br><span class="line">    log.info(<span class="keyword">this</span>.getServiceName() + <span class="string">" service end"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-3-负载均衡函数调用分析"><a href="#2-3-负载均衡函数调用分析" class="headerlink" title="2.3 负载均衡函数调用分析"></a>2.3 负载均衡函数调用分析</h3><p>首先调用的是MQClientInstance的<code>doRebalance()</code>方法，在该方法中，首先获取的是消费者组内部客户端map，然后遍历这个map中的元素，并调用内部客户端<code>(MQConsumerInner)</code>的<code>doRebalance()</code>进行负载均衡。在一个<code>JVM</code>中只存在一个<code>MQClientInstance</code>，而一个消费者组又只存在一个消费者内部客户端，所以进行负载均衡就是对每个消费者组内部客户端执行负载均衡，。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">MQClientInstance#</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">doRebalance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 遍历消费的存储表 &lt;group,consumerImpl&gt;</span></span><br><span class="line">        <span class="keyword">for</span> (Map.Entry&lt;String, MQConsumerInner&gt; entry : <span class="keyword">this</span>.consumerTable.entrySet()) &#123;</span><br><span class="line">            <span class="comment">// 获取对应的消费者内部客户端</span></span><br><span class="line">            MQConsumerInner impl = entry.getValue();</span><br><span class="line">            <span class="keyword">if</span> (impl != <span class="keyword">null</span>) &#123;</span><br><span class="line">                <span class="keyword">try</span> &#123;</span><br><span class="line">                    <span class="comment">// 调用实现类做真正的负载均衡</span></span><br><span class="line">                    impl.doRebalance();</span><br><span class="line">                &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">                    log.error(<span class="string">"doRebalance exception"</span>, e);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">DefaultMQPushConsumerImpl#</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">doRebalance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (!<span class="keyword">this</span>.pause) &#123;</span><br><span class="line">        <span class="comment">// 调用里面的负载均衡实现类做负载均衡</span></span><br><span class="line">        <span class="keyword">this</span>.rebalanceImpl.doRebalance(<span class="keyword">this</span>.isConsumeOrderly());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-4-更新主题消息队列"><a href="#2-4-更新主题消息队列" class="headerlink" title="2.4 更新主题消息队列"></a>2.4 更新主题消息队列</h3><p><img src="./image/rebalance.png" alt=""></p>
+<p>参考资料<br><a href="https://www.zhihu.com/question/335565756/answer/1460905615" target="_blank" rel="noopener">在rocketmq中，部署多台机器上的消费者负载均衡是如何解决的?</a></p>
+
+      
+    </div>
+    <div class="article-footer">
+      <blockquote class="mt-2x">
+  <ul class="post-copyright list-unstyled">
+    
+    <li class="post-copyright-link hidden-xs">
+      <strong>本文链接：</strong>
+      <a href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" title="我理解的RocketMQ—消费者负载均衡的实现" target="_blank" rel="external">http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/</a>
+    </li>
+    
+    <li class="post-copyright-license">
+      <strong>版权声明： </strong> 本博客所有文章除特别声明外，均采用 <a href="http://creativecommons.org/licenses/by/4.0/deed.zh" target="_blank" rel="external">CC BY 4.0 CN协议</a> 许可协议。转载请注明出处！
+    </li>
+  </ul>
+</blockquote>
+
+
+<div class="panel panel-default panel-badger">
+  <div class="panel-body">
+    <figure class="media">
+      <div class="media-left">
+        <a href="https://github.com/xiaojkql" target="_blank" class="img-burn thumb-sm visible-lg">
+          <img src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" class="img-rounded w-full" alt="">
+        </a>
+      </div>
+      <div class="media-body">
+        <h3 class="media-heading"><a href="https://github.com/xiaojkql" target="_blank"><span class="text-dark">覃缘</span><small class="ml-1x">Java开发工程师</small></a></h3>
+        <div>破釜沉舟，百二秦关终属楚。</div>
+      </div>
+    </figure>
+  </div>
+</div>
+
+
+    </div>
+  </article>
+  
+    
+  <section id="comments">
+  	
+           
+    
+  </section>
+
+
+  
+</div>
+
+  <nav class="bar bar-footer clearfix" data-stick-bottom>
+  <div class="bar-inner">
+  
+  <ul class="pager pull-left">
+    
+    <li class="prev">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" title="我理解的RocketMQ—消息偏移量管理分析"><i class="icon icon-angle-left" aria-hidden="true"></i><span>&nbsp;&nbsp;上一篇</span></a>
+    </li>
+    
+    
+    <li class="next">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" title="我理解的RocketMQ—网络层的通信协议"><span>下一篇&nbsp;&nbsp;</span><i class="icon icon-angle-right" aria-hidden="true"></i></a>
+    </li>
+    
+    
+    <li class="toggle-toc">
+      <a class="toggle-btn collapsed" data-toggle="collapse" href="#collapseToc" aria-expanded="false" title="文章目录" role="button">
+        <span>[&nbsp;</span><span>文章目录</span>
+        <i class="text-collapsed icon icon-anchor"></i>
+        <i class="text-in icon icon-close"></i>
+        <span>]</span>
+      </a>
+    </li>
+    
+  </ul>
+  
+  
+  
+  <div class="bar-right">
+    
+  </div>
+  </div>
+</nav>
+  
+
+
+</main>
+
+  <footer class="footer" itemscope itemtype="http://schema.org/WPFooter">
+	
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    <div class="copyright">
+    	
+        <div class="publishby">
+        	Theme by <a href="https://github.com/cofess" target="_blank"> cofess </a>base on <a href="https://github.com/cofess/hexo-theme-pure" target="_blank">pure</a>.
+        </div>
+    </div>
+</footer>
+  <script src="//cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+<script>
+window.jQuery || document.write('<script src="js/jquery.min.js"><\/script>')
+</script>
+
+<script src="/js/plugin.min.js"></script>
+
+
+<script src="/js/application.js"></script>
+
+
+    <script>
+(function (window) {
+    var INSIGHT_CONFIG = {
+        TRANSLATION: {
+            POSTS: '文章',
+            PAGES: '页面',
+            CATEGORIES: '分类',
+            TAGS: '标签',
+            UNTITLED: '(未命名)',
+        },
+        ROOT_URL: '/',
+        CONTENT_URL: '/content.json',
+    };
+    window.INSIGHT_CONFIG = INSIGHT_CONFIG;
+})(window);
+</script>
+
+<script src="/js/insight.js"></script>
+
+
+
+
+
+
+   
+
+
+
+
+   
+    
+  <!-- <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css"> -->
+  <script src="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+  <script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '',
+    clientSecret: '',
+    repo: '',
+    owner: '',
+    admin: [''],
+    id: md5(location.pathname),
+    distractionFreeMode: true
+  })
+  gitalk.render('comments')
+  </script>
+
+      
+
+
+
+  <script src="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.js"></script>
+  <script>
+  //利用 FancyBox 实现点击图片放大
+  $(document).ready(function() {
+    $('article img').not('[hidden]').not('.panel-body img').each(function() {
+      var $image = $(this);
+      var imageCaption = $image.attr('alt');
+      var $imageWrapLink = $image.parent('a');
+      if ($imageWrapLink.length < 1) {
+        var src = this.getAttribute('src');
+        var idx = src.lastIndexOf('?');
+        if (idx != -1) {
+          src = src.substring(0, idx);
+        }
+        $imageWrapLink = $image.wrap('<a href="' + src + '"></a>').parent('a');
+      }
+      $imageWrapLink.attr('data-fancybox', 'images');
+      if (imageCaption) {
+        $imageWrapLink.attr('data-caption', imageCaption);
+      }
+    });
+    $().fancybox({
+      selector: '[data-fancybox="images"]',
+      hash: false,
+      loop: false,
+    });
+  });
+  </script>
+
+
+
+
+
+</body>
+</html>

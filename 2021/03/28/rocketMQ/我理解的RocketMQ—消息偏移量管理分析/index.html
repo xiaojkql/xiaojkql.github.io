@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+  <meta charset="utf-8">
+  
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="Cache-Control" content="no-transform" />
+  <meta http-equiv="Cache-Control" content="no-siteapp" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="format-detection" content="telephone=no,email=no,adress=no">
+  <!-- Color theme for statusbar -->
+  <meta name="theme-color" content="#000000" />
+  <!-- 强制页面在当前窗口以独立页面显示,防止别人在框架里调用页面 -->
+  <meta http-equiv="window-target" content="_top" />
+  
+  
+  <title>我理解的RocketMQ—消息偏移量管理分析 | xiaojkql</title>
+  <meta name="description" content="1 客户端逻辑1.1 概述偏移量管理主要是指管理每个消息队列的消费进度：集群模式消费下会将消息队列的消费进度保存在Broker端，广播模式消费下消息队列的消费进度保存在消费者本地。 组件分析：RocketMQ定义了一个接口OffsetStore。它的实现类有两个：RemoteBrokerOffsetStore和LocalFileOffsetStore前者主要是集群消费模式下使用，即与broker进">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我理解的RocketMQ—消息偏移量管理分析">
+<meta property="og:url" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1 客户端逻辑1.1 概述偏移量管理主要是指管理每个消息队列的消费进度：集群模式消费下会将消息队列的消费进度保存在Broker端，广播模式消费下消息队列的消费进度保存在消费者本地。 组件分析：RocketMQ定义了一个接口OffsetStore。它的实现类有两个：RemoteBrokerOffsetStore和LocalFileOffsetStore前者主要是集群消费模式下使用，即与broker进">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/image/OffsetStore.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/image/update_offset_to_broker.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/image/consumerOffset.png">
+<meta property="article:published_time" content="2021-03-28T04:55:03.000Z">
+<meta property="article:modified_time" content="2021-03-28T04:56:13.663Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="RocketMQ">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/image/OffsetStore.png">
+  <!-- Canonical links -->
+  <link rel="canonical" href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/index.html">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png" type="image/x-icon">
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+  
+  
+    <link href="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.css" rel="stylesheet">
+  
+  
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.css">
+  
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+
+<body class="main-center" itemscope itemtype="http://schema.org/WebPage">
+  <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+  <div class="slimContent">
+    <div class="navbar-header">
+      
+      
+      <div class="profile-block text-center">
+        <a id="avatar" href="https://github.com/xiaojkql" target="_blank">
+          <img class="img-circle img-rotate" src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" width="200" height="200">
+        </a>
+        <h2 id="name" class="hidden-xs hidden-sm">覃缘</h2>
+        <h3 id="title" class="hidden-xs hidden-sm hidden-md">Java开发工程师</h3>
+        <small id="location" class="text-muted hidden-xs hidden-sm"><i class="icon icon-map-marker"></i> Shenzhen, China</small>
+      </div>
+      
+      <div class="search" id="search-form-wrap">
+
+    <form class="search-form sidebar-form">
+        <div class="input-group">
+            <input type="text" class="search-form-input form-control" placeholder="搜索" />
+            <span class="input-group-btn">
+                <button type="submit" class="search-form-submit btn btn-flat" onclick="return false;"><i class="icon icon-search"></i></button>
+            </span>
+        </div>
+    </form>
+    <div class="ins-search">
+  <div class="ins-search-mask"></div>
+  <div class="ins-search-container">
+    <div class="ins-input-wrapper">
+      <input type="text" class="ins-search-input" placeholder="想要查找什么..." x-webkit-speech />
+      <button type="button" class="close ins-close ins-selectable" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+    </div>
+    <div class="ins-section-wrapper">
+      <div class="ins-section-container"></div>
+    </div>
+  </div>
+</div>
+
+
+</div>
+      <button class="navbar-toggle collapsed" type="button" data-toggle="collapse" data-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <nav id="main-navbar" class="collapse navbar-collapse" itemscope itemtype="http://schema.org/SiteNavigationElement" role="navigation">
+      <ul class="nav navbar-nav main-nav ">
+        
+        
+        <li class="menu-item menu-item-home">
+          <a href="/.">
+            
+            <i class="icon icon-home-fill"></i>
+            
+            <span class="menu-title">首页</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives">
+            
+            <i class="icon icon-archives-fill"></i>
+            
+            <span class="menu-title">归档</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories">
+            
+            <i class="icon icon-folder"></i>
+            
+            <span class="menu-title">分类</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags">
+            
+            <i class="icon icon-tags"></i>
+            
+            <span class="menu-title">标签</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-books">
+          <a href="/books">
+            
+            <i class="icon icon-book-fill"></i>
+            
+            <span class="menu-title">书单</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about">
+            
+            <i class="icon icon-cup-fill"></i>
+            
+            <span class="menu-title">关于</span>
+          </a>
+        </li>
+        
+      </ul>
+      
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    </nav>
+  </div>
+</header>
+
+  
+    <aside class="sidebar" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    
+      <div class="widget">
+    <h3 class="widget-title">公告</h3>
+    <div class="widget-body">
+        <div id="board">
+            <div class="content">
+                <p>欢迎交流与分享经验!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget-body">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/RocketMQ/">RocketMQ</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/hexo/">hexo</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/java-basic/">java-basic</a><span class="category-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget-body">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/basic/" rel="tag">basic</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/hexo/" rel="tag">hexo</a><span class="tag-list-count">2</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/java/" rel="tag">java</a><span class="tag-list-count">6</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget-body tagcloud">
+      <a href="/tags/RocketMQ/" style="font-size: 13.67px;">RocketMQ</a> <a href="/tags/basic/" style="font-size: 13px;">basic</a> <a href="/tags/hexo/" style="font-size: 13.33px;">hexo</a> <a href="/tags/java/" style="font-size: 14px;">java</a>
+    </div>
+  </div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget-body">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/03/">三月 2021</a><span class="archive-list-count">4</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/01/">一月 2021</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/11/">十一月 2020</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/06/">六月 2020</a><span class="archive-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget-body">
+      <ul class="recent-post-list list-unstyled ">
+        
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ—消息偏移量管理分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:03.000Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="title">我理解的RocketMQ—消费者负载均衡的实现</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.995Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="title">我理解的RocketMQ—网络层的通信协议</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.990Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ-同步发送消息源码分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.981Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ：主从复制HA(high availability)的机制分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-01-16T16:58:50.829Z" itemprop="datePublished">2021-01-17</time>
+              </p>
+            </div>
+          </li>
+          
+      </ul>
+    </div>
+  </div>
+  
+
+    
+  </div>
+</aside>
+
+  
+  
+<aside class="sidebar sidebar-toc collapse" id="collapseToc" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    <nav id="toc" class="article-toc">
+      <h3 class="toc-title">文章目录</h3>
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-客户端逻辑"><span class="toc-number">1.</span> <span class="toc-text">1 客户端逻辑</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-概述"><span class="toc-number">1.1.</span> <span class="toc-text">1.1 概述</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-2-更新消息队列的偏移量"><span class="toc-number">1.2.</span> <span class="toc-text">1.2 更新消息队列的偏移量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-3-向Broker发送消息偏移量"><span class="toc-number">1.3.</span> <span class="toc-text">1.3 向Broker发送消息偏移量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-4-读取消息队列的偏移量"><span class="toc-number">1.4.</span> <span class="toc-text">1.4 读取消息队列的偏移量</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-服务端的处理逻辑"><span class="toc-number">2.</span> <span class="toc-text">2 服务端的处理逻辑</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-更新消费者传给broker的消费偏移量"><span class="toc-number">2.1.</span> <span class="toc-text">2.1 更新消费者传给broker的消费偏移量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-源码分析"><span class="toc-number">2.2.</span> <span class="toc-text">2.2 源码分析</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#2-2-1-处理偏移量更新请求和更新到内存中的流程"><span class="toc-number">2.2.1.</span> <span class="toc-text">2.2.1 处理偏移量更新请求和更新到内存中的流程</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2-2-2-消息偏移量持久化到磁盘"><span class="toc-number">2.2.2.</span> <span class="toc-text">2.2.2 消息偏移量持久化到磁盘</span></a></li></ol></li></ol></li></ol>
+    </nav>
+  </div>
+</aside>
+
+<main class="main" role="main">
+  <div class="content">
+  <article id="post-rocketMQ/我理解的RocketMQ—消息偏移量管理分析" class="article article-type-post" itemscope itemtype="http://schema.org/BlogPosting">
+    
+    <div class="article-header">
+      
+        
+  
+    <h1 class="article-title" itemprop="name">
+      我理解的RocketMQ—消息偏移量管理分析
+    </h1>
+  
+
+      
+      <div class="article-meta">
+        <span class="article-date">
+    <i class="icon icon-calendar-check"></i>
+	<a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="article-date">
+	  <time datetime="2021-03-28T04:55:03.000Z" itemprop="datePublished">2021-03-28</time>
+	</a>
+</span>
+        
+  <span class="article-category">
+    <i class="icon icon-folder"></i>
+    <a class="article-category-link" href="/categories/RocketMQ/">RocketMQ</a>
+  </span>
+
+        
+  <span class="article-tag">
+    <i class="icon icon-tags"></i>
+	<a class="article-tag-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a>, <a class="article-tag-link" href="/tags/java/" rel="tag">java</a>
+  </span>
+
+
+        
+
+        <span class="post-comment"><i class="icon icon-comment"></i> <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/#comments" class="article-comment-link">评论</a></span>
+        
+      </div>
+    </div>
+    <div class="article-entry marked-body" itemprop="articleBody">
+      
+        <h2 id="1-客户端逻辑"><a href="#1-客户端逻辑" class="headerlink" title="1 客户端逻辑"></a>1 客户端逻辑</h2><h3 id="1-1-概述"><a href="#1-1-概述" class="headerlink" title="1.1 概述"></a>1.1 概述</h3><p>偏移量管理主要是指管理每个消息队列的消费进度：集群模式消费下会将消息队列的消费进度保存在Broker端，广播模式消费下消息队列的消费进度保存在消费者本地。</p>
+<p><strong>组件分析</strong>：RocketMQ定义了一个接口OffsetStore。它的实现类有两个：<code>RemoteBrokerOffsetStore</code>和<code>LocalFileOffsetStore</code>前者主要是集群消费模式下使用，即与broker进行打交道，将消息队列的消费偏移量通过网络传递给Broker；后者主要是广播消费模式下使用，即直接将消费偏移量存储在消费者所在的本地中。入下图所示：</p>
+<p><img src="image/OffsetStore.png" alt=""></p>
+<p><code>offsetstore</code>保存在消费者内部客户单<code>ConsumerInner</code>的实现类中的，其初始化创建的时机在内部客户端的<code>start()</code>方法中。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">switch</span> (<span class="keyword">this</span>.defaultMQPushConsumer.getMessageModel()) &#123;</span><br><span class="line">    <span class="comment">// 广播模式偏移量持久化为本地</span></span><br><span class="line">    <span class="keyword">case</span> BROADCASTING:</span><br><span class="line">        <span class="keyword">this</span>.offsetStore = <span class="keyword">new</span> LocalFileOffsetStore(<span class="keyword">this</span>.mQClientFactory, <span class="keyword">this</span>.defaultMQPushConsumer.getConsumerGroup());</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="comment">// 集群模式下，偏移量持久化方式为远程</span></span><br><span class="line">    <span class="keyword">case</span> CLUSTERING:</span><br><span class="line">        <span class="keyword">this</span>.offsetStore = <span class="keyword">new</span> RemoteBrokerOffsetStore(<span class="keyword">this</span>.mQClientFactory, <span class="keyword">this</span>.defaultMQPushConsumer.getConsumerGroup());</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>下面主要分析<code>RemoteBrokerOffsetStore</code>的逻辑。</p>
+<p>主要是两个逻辑，如下图所示</p>
+<ul>
+<li>将消息偏移量更新到本地内存中管理消息偏移量的组件</li>
+<li>将内存中保存的消息偏移量发送给Broker，更新Broker端保存的消息偏移量</li>
+</ul>
+<p><img src="./image/update_offset_to_broker.png" alt=""></p>
+<h3 id="1-2-更新消息队列的偏移量"><a href="#1-2-更新消息队列的偏移量" class="headerlink" title="1.2 更新消息队列的偏移量"></a>1.2 更新消息队列的偏移量</h3><p>updateOffset<br>并发消息消费服务中<code>ConsumeMessageConcurrentlyService</code>#<code>processConsumeResult()</code>处理消息消费结果的方法中在消息处理完成以后会调用更新消息队列的偏移量</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 获取偏移量存储实现，并调用其更新偏移量方法更新偏移量</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">this</span>.defaultMQPushConsumerImpl.getOffsetStore()</span><br><span class="line">.updateOffset(consumeRequest.getMessageQueue(), offset, <span class="keyword">true</span>);</span><br></pre></td></tr></table></figure>
+
+<p>下面是<code>RemoteBrokerOffsetStore</code>的更新逻辑<br>将已经确认消费了的偏移量存储偏移量管理器中。此处的更新仅仅是更新了保存每个消息队列的偏移量的map中的值，并没有将偏移量上传到broker。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">updateOffset</span><span class="params">(MessageQueue mq, <span class="keyword">long</span> offset, <span class="keyword">boolean</span> increaseOnly)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (mq != <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="comment">// ConcurrentMap&lt;MessageQueue, AtomicLong&gt;</span></span><br><span class="line">        <span class="comment">// 获取消息队列对应的偏移量</span></span><br><span class="line">        AtomicLong offsetOld = <span class="keyword">this</span>.offsetTable.get(mq);</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">null</span> == offsetOld) &#123;</span><br><span class="line">            <span class="comment">// 更新table</span></span><br><span class="line">            offsetOld = <span class="keyword">this</span>.offsetTable.putIfAbsent(mq, <span class="keyword">new</span> AtomicLong(offset));</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">null</span> != offsetOld) &#123;</span><br><span class="line">            <span class="comment">// 是否是只增模式</span></span><br><span class="line">            <span class="keyword">if</span> (increaseOnly) &#123;</span><br><span class="line">                MixAll.compareAndIncreaseOnly(offsetOld, offset);</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                offsetOld.set(offset);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="1-3-向Broker发送消息偏移量"><a href="#1-3-向Broker发送消息偏移量" class="headerlink" title="1.3 向Broker发送消息偏移量"></a>1.3 向Broker发送消息偏移量</h3><p>向服务端发送消息偏移量是通过<code>MQClientInstance</code>中启动的一个定时任务来完成的。</p>
+<p>1 在其<code>startScheduledTask</code>方法中开启下列定时任务</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">this</span>.scheduledExecutorService.scheduleAtFixedRate(<span class="keyword">new</span> Runnable() &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="comment">// 对已消费的消息的偏移量进行持久化</span></span><br><span class="line">            MQClientInstance.<span class="keyword">this</span>.persistAllConsumerOffset();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">            log.error(<span class="string">"ScheduledTask persistAllConsumerOffset exception"</span>, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;, <span class="number">1000</span> * <span class="number">10</span>, <span class="keyword">this</span>.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);</span><br></pre></td></tr></table></figure>
+
+<p>2 调用<code>MQClientInstance</code>的<code>persisAllConsumerOffset()</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">persistAllConsumerOffset</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取所有消费者组对应的内部客户端</span></span><br><span class="line">    Iterator&lt;Entry&lt;String, MQConsumerInner&gt;&gt; it = <span class="keyword">this</span>.consumerTable.entrySet().iterator();</span><br><span class="line">    <span class="keyword">while</span> (it.hasNext()) &#123;</span><br><span class="line">        Entry&lt;String, MQConsumerInner&gt; entry = it.next();</span><br><span class="line">        MQConsumerInner impl = entry.getValue();</span><br><span class="line">        <span class="comment">// 调用内部客户端进行持久化</span></span><br><span class="line">        impl.persistConsumerOffset();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>3 调用内部消费者客户端的持久化方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">persistConsumerOffset</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="keyword">this</span>.makeSureStateOK();</span><br><span class="line">        Set&lt;MessageQueue&gt; mqs = <span class="keyword">new</span> HashSet&lt;MessageQueue&gt;();</span><br><span class="line">        <span class="comment">// 获取所有的分配的消息队列</span></span><br><span class="line">        Set&lt;MessageQueue&gt; allocateMq = <span class="keyword">this</span>.rebalanceImpl.getProcessQueueTable().keySet();</span><br><span class="line">        mqs.addAll(allocateMq);</span><br><span class="line">        <span class="comment">// 持久化偏移量</span></span><br><span class="line">        <span class="keyword">this</span>.offsetStore.persistAll(mqs);</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        log.error(<span class="string">"group: "</span> + <span class="keyword">this</span>.defaultMQPushConsumer.getConsumerGroup() + <span class="string">" persistConsumerOffset exception"</span>, e);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>4 调用偏移量管理器的更新</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">persistAll</span><span class="params">(Set&lt;MessageQueue&gt; mqs)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">null</span> == mqs || mqs.isEmpty())</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">final</span> HashSet&lt;MessageQueue&gt; unusedMQ = <span class="keyword">new</span> HashSet&lt;MessageQueue&gt;();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历保存消息队列偏移量的map</span></span><br><span class="line">    <span class="keyword">for</span> (Map.Entry&lt;MessageQueue, AtomicLong&gt; entry : <span class="keyword">this</span>.offsetTable.entrySet()) &#123;</span><br><span class="line">        MessageQueue mq = entry.getKey();</span><br><span class="line">        AtomicLong offset = entry.getValue();</span><br><span class="line">        <span class="keyword">if</span> (offset != <span class="keyword">null</span>) &#123;</span><br><span class="line">            <span class="keyword">if</span> (mqs.contains(mq)) &#123;</span><br><span class="line">                <span class="keyword">try</span> &#123;</span><br><span class="line">                    <span class="comment">// 更新到</span></span><br><span class="line">                    <span class="keyword">this</span>.updateConsumeOffsetToBroker(mq, offset.get());</span><br><span class="line">                    log.info(<span class="string">"[persistAll] Group: &#123;&#125; ClientId: &#123;&#125; updateConsumeOffsetToBroker &#123;&#125; &#123;&#125;"</span>,</span><br><span class="line">                            <span class="keyword">this</span>.groupName,</span><br><span class="line">                            <span class="keyword">this</span>.mQClientFactory.getClientId(),</span><br><span class="line">                            mq,</span><br><span class="line">                            offset.get());</span><br><span class="line">                &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">                    log.error(<span class="string">"updateConsumeOffsetToBroker exception, "</span> + mq.toString(), e);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                unusedMQ.add(mq);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!unusedMQ.isEmpty()) &#123;</span><br><span class="line">        <span class="keyword">for</span> (MessageQueue mq : unusedMQ) &#123;</span><br><span class="line">            <span class="keyword">this</span>.offsetTable.remove(mq);</span><br><span class="line">            log.info(<span class="string">"remove unused mq, &#123;&#125;, &#123;&#125;"</span>, mq, <span class="keyword">this</span>.groupName);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>接下来就是通过网络层发送网络请求给Broker进行更新消息对立偏移量。</p>
+<h3 id="1-4-读取消息队列的偏移量"><a href="#1-4-读取消息队列的偏移量" class="headerlink" title="1.4 读取消息队列的偏移量"></a>1.4 读取消息队列的偏移量</h3><p>两个时刻需要获取Broker保存的偏移量</p>
+<ul>
+<li>消费者刚启动的时候会去Broker获取消息队列对应的偏移量</li>
+<li>消费者重平衡后，分配得到新的消息队列，也要重新获取偏移量</li>
+</ul>
+<p>readOffset<br>在DefaultMQPushConsumerImpl的pullMessage方法中<br>在消费之前会读取一次</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">commitOffsetValue = <span class="keyword">this</span>.offsetStore.readOffset(pullRequest.getMessageQueue(), ReadOffsetType.READ_FROM_MEMORY);</span><br></pre></td></tr></table></figure>
+
+
+<h2 id="2-服务端的处理逻辑"><a href="#2-服务端的处理逻辑" class="headerlink" title="2 服务端的处理逻辑"></a>2 服务端的处理逻辑</h2><p>服务端注册了的消费消息偏移量的请求处理器，首先是有关偏移量的三个请求码</p>
+<ul>
+<li>GET_CONSUMER_LIST_BY_GROUP：根据组名获取消费者列表</li>
+<li>UPDATE_CONSUMER_OFFSET：更新消费偏移量的请求</li>
+<li>QUERY_CONSUMER_OFFSET：查询消费者的偏移量</li>
+</ul>
+<p>所以这三个的请求码将交给ConsumerManageProcessor来进行处理。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ConsumerManageProcessor consumerManageProcessor = <span class="keyword">new</span> ConsumerManageProcessor(<span class="keyword">this</span>);</span><br><span class="line"><span class="keyword">this</span>.remotingServer.registerProcessor(RequestCode.GET_CONSUMER_LIST_BY_GROUP, consumerManageProcessor, <span class="keyword">this</span>.consumerManageExecutor);</span><br><span class="line"><span class="keyword">this</span>.remotingServer.registerProcessor(RequestCode.UPDATE_CONSUMER_OFFSET, consumerManageProcessor, <span class="keyword">this</span>.consumerManageExecutor);</span><br><span class="line"><span class="keyword">this</span>.remotingServer.registerProcessor(RequestCode.QUERY_CONSUMER_OFFSET, consumerManageProcessor, <span class="keyword">this</span>.consumerManageExecutor);</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-1-更新消费者传给broker的消费偏移量"><a href="#2-1-更新消费者传给broker的消费偏移量" class="headerlink" title="2.1 更新消费者传给broker的消费偏移量"></a>2.1 更新消费者传给broker的消费偏移量</h3><p>内存存储方式</p>
+<ul>
+<li>位置：<code>ConsumerOffsetManager</code>的<code>offsetTable</code>中</li>
+<li>格式：<code>ConcurrentMap&lt;String/* topic@group */, ConcurrentMap&lt;Integer, Long&gt;&gt;</code>,第一层<code>key</code>是主题+消费者组，集群模式下的消费模式；第二层的<code>key</code>是<code>QueueID</code>队列<code>ID</code>。</li>
+</ul>
+<p>外部存储位置：</p>
+<p>下图表示整个更新消费偏移量和持久化的过程；整体流程: 先更新内存中的存储offetTable，然后通过一个持久化的线程将offsetTable中的数据落盘持久化。</p>
+<p><img src="image/consumerOffset.png" alt=""></p>
+<h3 id="2-2-源码分析"><a href="#2-2-源码分析" class="headerlink" title="2.2 源码分析"></a>2.2 源码分析</h3><h4 id="2-2-1-处理偏移量更新请求和更新到内存中的流程"><a href="#2-2-1-处理偏移量更新请求和更新到内存中的流程" class="headerlink" title="2.2.1 处理偏移量更新请求和更新到内存中的流程"></a>2.2.1 处理偏移量更新请求和更新到内存中的流程</h4><p>1 请求处理的入口</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// RocketMQ里面的通用做法，发送请求时将给请求赋值一个请求码；</span></span><br><span class="line"><span class="comment">// 服务端在接收到请求的时候将根据请求码选择不同的请求处理处理器;</span></span><br><span class="line"><span class="comment">// 统一的接口processRequest()</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> RemotingCommand <span class="title">processRequest</span><span class="params">(ChannelHandlerContext ctx, RemotingCommand request)</span></span></span><br><span class="line"><span class="function">        <span class="keyword">throws</span> RemotingCommandException </span>&#123;</span><br><span class="line">    <span class="comment">// ConsuemrManagerProcessor内部又分了不同的处理逻辑</span></span><br><span class="line">    <span class="keyword">switch</span> (request.getCode()) &#123;</span><br><span class="line">        <span class="comment">// 处理</span></span><br><span class="line">        <span class="keyword">case</span> RequestCode.GET_CONSUMER_LIST_BY_GROUP:</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">this</span>.getConsumerListByGroup(ctx, request);</span><br><span class="line">        <span class="comment">// 处理更新偏移量</span></span><br><span class="line">        <span class="keyword">case</span> RequestCode.UPDATE_CONSUMER_OFFSET:</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">this</span>.updateConsumerOffset(ctx, request);</span><br><span class="line">        <span class="keyword">case</span> RequestCode.QUERY_CONSUMER_OFFSET:</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">this</span>.queryConsumerOffset(ctx, request);</span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>2 处理更新消费偏移量的入口</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> RemotingCommand <span class="title">updateConsumerOffset</span><span class="params">(ChannelHandlerContext ctx, RemotingCommand request)</span></span></span><br><span class="line"><span class="function">        <span class="keyword">throws</span> RemotingCommandException </span>&#123;</span><br><span class="line">    <span class="comment">// 首先创建响应,RocketMQ中惯例做法，具体可参照</span></span><br><span class="line">    <span class="keyword">final</span> RemotingCommand response =</span><br><span class="line">            RemotingCommand.createResponseCommand(UpdateConsumerOffsetResponseHeader<span class="class">.<span class="keyword">class</span>)</span>;</span><br><span class="line">    <span class="comment">// 解码请求头</span></span><br><span class="line">    <span class="keyword">final</span> UpdateConsumerOffsetRequestHeader requestHeader =</span><br><span class="line">            (UpdateConsumerOffsetRequestHeader) request</span><br><span class="line">                    .decodeCommandCustomHeader(UpdateConsumerOffsetRequestHeader<span class="class">.<span class="keyword">class</span>)</span>;</span><br><span class="line">    <span class="comment">// 调用消费偏移量偏移器进行更新消费偏移量</span></span><br><span class="line">    <span class="keyword">this</span>.brokerController.getConsumerOffsetManager()</span><br><span class="line">            .commitOffset(</span><br><span class="line">                    RemotingHelper.parseChannelRemoteAddr(ctx.channel()),</span><br><span class="line">                    requestHeader.getConsumerGroup(), <span class="comment">// 消费者组</span></span><br><span class="line">                    requestHeader.getTopic(), <span class="comment">// 主题</span></span><br><span class="line">                    requestHeader.getQueueId(), <span class="comment">// 队列ID</span></span><br><span class="line">                    requestHeader.getCommitOffset()); <span class="comment">// 偏移量</span></span><br><span class="line">    response.setCode(ResponseCode.SUCCESS);</span><br><span class="line">    response.setRemark(<span class="keyword">null</span>);</span><br><span class="line">    <span class="keyword">return</span> response;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>3 消费偏移量管理器更新偏移量的入口</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">commitOffset</span><span class="params">(<span class="keyword">final</span> String clientHost, <span class="keyword">final</span> String group, <span class="keyword">final</span> String topic, <span class="keyword">final</span> <span class="keyword">int</span> queueId,</span></span></span><br><span class="line"><span class="function"><span class="params">    <span class="keyword">final</span> <span class="keyword">long</span> offset)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// topic@group</span></span><br><span class="line">    <span class="comment">// 构建key: 主题/消费者组名</span></span><br><span class="line">    String key = topic + TOPIC_GROUP_SEPARATOR + group;</span><br><span class="line">    <span class="keyword">this</span>.commitOffset(clientHost, key, queueId, offset);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>4 将消费者端传上来的消费偏移量存储到内存之中的map</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">commitOffset</span><span class="params">(<span class="keyword">final</span> String clientHost, <span class="keyword">final</span> String key, <span class="keyword">final</span> <span class="keyword">int</span> queueId, <span class="keyword">final</span> <span class="keyword">long</span> offset)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 使用 主题/消费者名 获取存储偏移量的map&lt;queueId, offset&gt;</span></span><br><span class="line">    ConcurrentMap&lt;Integer, Long&gt; map = <span class="keyword">this</span>.offsetTable.get(key);</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">null</span> == map) &#123;</span><br><span class="line">        map = <span class="keyword">new</span> ConcurrentHashMap&lt;Integer, Long&gt;(<span class="number">32</span>);</span><br><span class="line">        map.put(queueId, offset);</span><br><span class="line">        <span class="keyword">this</span>.offsetTable.put(key, map);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        Long storeOffset = map.put(queueId, offset);</span><br><span class="line">        <span class="keyword">if</span> (storeOffset != <span class="keyword">null</span> &amp;&amp; offset &lt; storeOffset) &#123;</span><br><span class="line">            log.warn(<span class="string">"[NOTIFYME]update consumer offset less than store. clientHost=&#123;&#125;, key=&#123;&#125;, queueId=&#123;&#125;, requestOffset=&#123;&#125;, storeOffset=&#123;&#125;"</span>, clientHost, key, queueId, offset, storeOffset);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="2-2-2-消息偏移量持久化到磁盘"><a href="#2-2-2-消息偏移量持久化到磁盘" class="headerlink" title="2.2.2 消息偏移量持久化到磁盘"></a>2.2.2 消息偏移量持久化到磁盘</h4><p>1、启动定时任务,该定时任务在<code>BrokerController</code>中被启动的；</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">this</span>.scheduledExecutorService.scheduleAtFixedRate(<span class="keyword">new</span> Runnable() &#123;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="comment">// 持久化偏移量</span></span><br><span class="line">            BrokerController.<span class="keyword">this</span>.consumerOffsetManager.persist();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">            log.error(<span class="string">"schedule persist consumerOffset error."</span>, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;, <span class="number">1000</span> * <span class="number">10</span>, <span class="keyword">this</span>.brokerConfig.getFlushConsumerOffsetInterval(), TimeUnit.MILLISECONDS);</span><br></pre></td></tr></table></figure>
+
+<p>2、调用<code>ConsuemerOffsetManager</code>进行偏移量持久化</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">persist</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 先进行编码</span></span><br><span class="line">    String jsonString = <span class="keyword">this</span>.encode(<span class="keyword">true</span>);</span><br><span class="line">    <span class="keyword">if</span> (jsonString != <span class="keyword">null</span>) &#123;</span><br><span class="line">        <span class="comment">// 获取存储文件的路径</span></span><br><span class="line">        String fileName = <span class="keyword">this</span>.configFilePath();</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="comment">// 将存储内容存到磁盘</span></span><br><span class="line">            MixAll.string2File(jsonString, fileName);</span><br><span class="line">        &#125; <span class="keyword">catch</span> (IOException e) &#123;</span><br><span class="line">            log.error(<span class="string">"persist file "</span> + fileName + <span class="string">" exception"</span>, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <div class="article-footer">
+      <blockquote class="mt-2x">
+  <ul class="post-copyright list-unstyled">
+    
+    <li class="post-copyright-link hidden-xs">
+      <strong>本文链接：</strong>
+      <a href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" title="我理解的RocketMQ—消息偏移量管理分析" target="_blank" rel="external">http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/</a>
+    </li>
+    
+    <li class="post-copyright-license">
+      <strong>版权声明： </strong> 本博客所有文章除特别声明外，均采用 <a href="http://creativecommons.org/licenses/by/4.0/deed.zh" target="_blank" rel="external">CC BY 4.0 CN协议</a> 许可协议。转载请注明出处！
+    </li>
+  </ul>
+</blockquote>
+
+
+<div class="panel panel-default panel-badger">
+  <div class="panel-body">
+    <figure class="media">
+      <div class="media-left">
+        <a href="https://github.com/xiaojkql" target="_blank" class="img-burn thumb-sm visible-lg">
+          <img src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" class="img-rounded w-full" alt="">
+        </a>
+      </div>
+      <div class="media-body">
+        <h3 class="media-heading"><a href="https://github.com/xiaojkql" target="_blank"><span class="text-dark">覃缘</span><small class="ml-1x">Java开发工程师</small></a></h3>
+        <div>破釜沉舟，百二秦关终属楚。</div>
+      </div>
+    </figure>
+  </div>
+</div>
+
+
+    </div>
+  </article>
+  
+    
+  <section id="comments">
+  	
+           
+    
+  </section>
+
+
+  
+</div>
+
+  <nav class="bar bar-footer clearfix" data-stick-bottom>
+  <div class="bar-inner">
+  
+  <ul class="pager pull-left">
+    
+    
+    <li class="next">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" title="我理解的RocketMQ—消费者负载均衡的实现"><span>下一篇&nbsp;&nbsp;</span><i class="icon icon-angle-right" aria-hidden="true"></i></a>
+    </li>
+    
+    
+    <li class="toggle-toc">
+      <a class="toggle-btn collapsed" data-toggle="collapse" href="#collapseToc" aria-expanded="false" title="文章目录" role="button">
+        <span>[&nbsp;</span><span>文章目录</span>
+        <i class="text-collapsed icon icon-anchor"></i>
+        <i class="text-in icon icon-close"></i>
+        <span>]</span>
+      </a>
+    </li>
+    
+  </ul>
+  
+  
+  
+  <div class="bar-right">
+    
+  </div>
+  </div>
+</nav>
+  
+
+
+</main>
+
+  <footer class="footer" itemscope itemtype="http://schema.org/WPFooter">
+	
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    <div class="copyright">
+    	
+        <div class="publishby">
+        	Theme by <a href="https://github.com/cofess" target="_blank"> cofess </a>base on <a href="https://github.com/cofess/hexo-theme-pure" target="_blank">pure</a>.
+        </div>
+    </div>
+</footer>
+  <script src="//cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+<script>
+window.jQuery || document.write('<script src="js/jquery.min.js"><\/script>')
+</script>
+
+<script src="/js/plugin.min.js"></script>
+
+
+<script src="/js/application.js"></script>
+
+
+    <script>
+(function (window) {
+    var INSIGHT_CONFIG = {
+        TRANSLATION: {
+            POSTS: '文章',
+            PAGES: '页面',
+            CATEGORIES: '分类',
+            TAGS: '标签',
+            UNTITLED: '(未命名)',
+        },
+        ROOT_URL: '/',
+        CONTENT_URL: '/content.json',
+    };
+    window.INSIGHT_CONFIG = INSIGHT_CONFIG;
+})(window);
+</script>
+
+<script src="/js/insight.js"></script>
+
+
+
+
+
+
+   
+
+
+
+
+   
+    
+  <!-- <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css"> -->
+  <script src="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+  <script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '',
+    clientSecret: '',
+    repo: '',
+    owner: '',
+    admin: [''],
+    id: md5(location.pathname),
+    distractionFreeMode: true
+  })
+  gitalk.render('comments')
+  </script>
+
+      
+
+
+
+  <script src="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.js"></script>
+  <script>
+  //利用 FancyBox 实现点击图片放大
+  $(document).ready(function() {
+    $('article img').not('[hidden]').not('.panel-body img').each(function() {
+      var $image = $(this);
+      var imageCaption = $image.attr('alt');
+      var $imageWrapLink = $image.parent('a');
+      if ($imageWrapLink.length < 1) {
+        var src = this.getAttribute('src');
+        var idx = src.lastIndexOf('?');
+        if (idx != -1) {
+          src = src.substring(0, idx);
+        }
+        $imageWrapLink = $image.wrap('<a href="' + src + '"></a>').parent('a');
+      }
+      $imageWrapLink.attr('data-fancybox', 'images');
+      if (imageCaption) {
+        $imageWrapLink.attr('data-caption', imageCaption);
+      }
+    });
+    $().fancybox({
+      selector: '[data-fancybox="images"]',
+      hash: false,
+      loop: false,
+    });
+  });
+  </script>
+
+
+
+
+
+</body>
+</html>

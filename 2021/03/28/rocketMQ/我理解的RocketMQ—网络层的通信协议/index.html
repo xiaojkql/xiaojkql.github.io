@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+  <meta charset="utf-8">
+  
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="Cache-Control" content="no-transform" />
+  <meta http-equiv="Cache-Control" content="no-siteapp" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="format-detection" content="telephone=no,email=no,adress=no">
+  <!-- Color theme for statusbar -->
+  <meta name="theme-color" content="#000000" />
+  <!-- 强制页面在当前窗口以独立页面显示,防止别人在框架里调用页面 -->
+  <meta http-equiv="window-target" content="_top" />
+  
+  
+  <title>我理解的RocketMQ—网络层的通信协议 | xiaojkql</title>
+  <meta name="description" content="1 概述如下图所示，业务层与Netty客户端之间用RemotingCommand进行交互，即业务层调用Netty发送消息时，会将消息封装在RemotingCommand对象里面，而Netty接收到外部消息的时候会给业务层返回RemotingCommand的对象实例。 Netty与外部世界通过字节流进行传输。Netty在发送消息的时候，对RemotingCommand进行编码（对象–&gt;字节流）">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我理解的RocketMQ—网络层的通信协议">
+<meta property="og:url" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1 概述如下图所示，业务层与Netty客户端之间用RemotingCommand进行交互，即业务层调用Netty发送消息时，会将消息封装在RemotingCommand对象里面，而Netty接收到外部消息的时候会给业务层返回RemotingCommand的对象实例。 Netty与外部世界通过字节流进行传输。Netty在发送消息的时候，对RemotingCommand进行编码（对象–&gt;字节流）">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/RemotingCommand.png">
+<meta property="og:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/CommandCustomHeader.png">
+<meta property="article:published_time" content="2021-03-28T04:55:02.990Z">
+<meta property="article:modified_time" content="2021-03-28T04:57:08.627Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="RocketMQ">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/image/RemotingCommand.png">
+  <!-- Canonical links -->
+  <link rel="canonical" href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/index.html">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png" type="image/x-icon">
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+  
+  
+    <link href="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.css" rel="stylesheet">
+  
+  
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.css">
+  
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+
+<body class="main-center" itemscope itemtype="http://schema.org/WebPage">
+  <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+  <div class="slimContent">
+    <div class="navbar-header">
+      
+      
+      <div class="profile-block text-center">
+        <a id="avatar" href="https://github.com/xiaojkql" target="_blank">
+          <img class="img-circle img-rotate" src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" width="200" height="200">
+        </a>
+        <h2 id="name" class="hidden-xs hidden-sm">覃缘</h2>
+        <h3 id="title" class="hidden-xs hidden-sm hidden-md">Java开发工程师</h3>
+        <small id="location" class="text-muted hidden-xs hidden-sm"><i class="icon icon-map-marker"></i> Shenzhen, China</small>
+      </div>
+      
+      <div class="search" id="search-form-wrap">
+
+    <form class="search-form sidebar-form">
+        <div class="input-group">
+            <input type="text" class="search-form-input form-control" placeholder="搜索" />
+            <span class="input-group-btn">
+                <button type="submit" class="search-form-submit btn btn-flat" onclick="return false;"><i class="icon icon-search"></i></button>
+            </span>
+        </div>
+    </form>
+    <div class="ins-search">
+  <div class="ins-search-mask"></div>
+  <div class="ins-search-container">
+    <div class="ins-input-wrapper">
+      <input type="text" class="ins-search-input" placeholder="想要查找什么..." x-webkit-speech />
+      <button type="button" class="close ins-close ins-selectable" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+    </div>
+    <div class="ins-section-wrapper">
+      <div class="ins-section-container"></div>
+    </div>
+  </div>
+</div>
+
+
+</div>
+      <button class="navbar-toggle collapsed" type="button" data-toggle="collapse" data-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <nav id="main-navbar" class="collapse navbar-collapse" itemscope itemtype="http://schema.org/SiteNavigationElement" role="navigation">
+      <ul class="nav navbar-nav main-nav ">
+        
+        
+        <li class="menu-item menu-item-home">
+          <a href="/.">
+            
+            <i class="icon icon-home-fill"></i>
+            
+            <span class="menu-title">首页</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives">
+            
+            <i class="icon icon-archives-fill"></i>
+            
+            <span class="menu-title">归档</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories">
+            
+            <i class="icon icon-folder"></i>
+            
+            <span class="menu-title">分类</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags">
+            
+            <i class="icon icon-tags"></i>
+            
+            <span class="menu-title">标签</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-books">
+          <a href="/books">
+            
+            <i class="icon icon-book-fill"></i>
+            
+            <span class="menu-title">书单</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about">
+            
+            <i class="icon icon-cup-fill"></i>
+            
+            <span class="menu-title">关于</span>
+          </a>
+        </li>
+        
+      </ul>
+      
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    </nav>
+  </div>
+</header>
+
+  
+    <aside class="sidebar" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    
+      <div class="widget">
+    <h3 class="widget-title">公告</h3>
+    <div class="widget-body">
+        <div id="board">
+            <div class="content">
+                <p>欢迎交流与分享经验!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget-body">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/RocketMQ/">RocketMQ</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/hexo/">hexo</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/java-basic/">java-basic</a><span class="category-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget-body">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/basic/" rel="tag">basic</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/hexo/" rel="tag">hexo</a><span class="tag-list-count">2</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/java/" rel="tag">java</a><span class="tag-list-count">6</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget-body tagcloud">
+      <a href="/tags/RocketMQ/" style="font-size: 13.67px;">RocketMQ</a> <a href="/tags/basic/" style="font-size: 13px;">basic</a> <a href="/tags/hexo/" style="font-size: 13.33px;">hexo</a> <a href="/tags/java/" style="font-size: 14px;">java</a>
+    </div>
+  </div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget-body">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/03/">三月 2021</a><span class="archive-list-count">4</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/01/">一月 2021</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/11/">十一月 2020</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/06/">六月 2020</a><span class="archive-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget-body">
+      <ul class="recent-post-list list-unstyled ">
+        
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ—消息偏移量管理分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:03.000Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="title">我理解的RocketMQ—消费者负载均衡的实现</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.995Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="title">我理解的RocketMQ—网络层的通信协议</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.990Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ-同步发送消息源码分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.981Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/01/17/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%EF%BC%9A%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6HA(high%20availability)%E7%9A%84%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ：主从复制HA(high availability)的机制分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-01-16T16:58:50.829Z" itemprop="datePublished">2021-01-17</time>
+              </p>
+            </div>
+          </li>
+          
+      </ul>
+    </div>
+  </div>
+  
+
+    
+  </div>
+</aside>
+
+  
+  
+<aside class="sidebar sidebar-toc collapse" id="collapseToc" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    <nav id="toc" class="article-toc">
+      <h3 class="toc-title">文章目录</h3>
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-概述"><span class="toc-number">1.</span> <span class="toc-text">1 概述</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-编码"><span class="toc-number">2.</span> <span class="toc-text">2 编码</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-解码"><span class="toc-number">3.</span> <span class="toc-text">3 解码</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-RemotingCommand"><span class="toc-number">4.</span> <span class="toc-text">4 RemotingCommand</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1-编码消息头"><span class="toc-number">4.1.</span> <span class="toc-text">4.1 编码消息头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2-解码"><span class="toc-number">4.2.</span> <span class="toc-text">4.2 解码</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-通信协议"><span class="toc-number">5.</span> <span class="toc-text">5 通信协议</span></a></li></ol>
+    </nav>
+  </div>
+</aside>
+
+<main class="main" role="main">
+  <div class="content">
+  <article id="post-rocketMQ/我理解的RocketMQ—网络层的通信协议" class="article article-type-post" itemscope itemtype="http://schema.org/BlogPosting">
+    
+    <div class="article-header">
+      
+        
+  
+    <h1 class="article-title" itemprop="name">
+      我理解的RocketMQ—网络层的通信协议
+    </h1>
+  
+
+      
+      <div class="article-meta">
+        <span class="article-date">
+    <i class="icon icon-calendar-check"></i>
+	<a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="article-date">
+	  <time datetime="2021-03-28T04:55:02.990Z" itemprop="datePublished">2021-03-28</time>
+	</a>
+</span>
+        
+  <span class="article-category">
+    <i class="icon icon-folder"></i>
+    <a class="article-category-link" href="/categories/RocketMQ/">RocketMQ</a>
+  </span>
+
+        
+  <span class="article-tag">
+    <i class="icon icon-tags"></i>
+	<a class="article-tag-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a>, <a class="article-tag-link" href="/tags/java/" rel="tag">java</a>
+  </span>
+
+
+        
+
+        <span class="post-comment"><i class="icon icon-comment"></i> <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/#comments" class="article-comment-link">评论</a></span>
+        
+      </div>
+    </div>
+    <div class="article-entry marked-body" itemprop="articleBody">
+      
+        <h2 id="1-概述"><a href="#1-概述" class="headerlink" title="1 概述"></a>1 概述</h2><p>如下图所示，业务层与Netty客户端之间用<code>RemotingCommand</code>进行交互，即业务层调用Netty发送消息时，会将消息封装在<code>RemotingCommand</code>对象里面，而Netty接收到外部消息的时候会给业务层返回<code>RemotingCommand</code>的对象实例。</p>
+<p>Netty与外部世界通过字节流进行传输。Netty在发送消息的时候，对RemotingCommand进行编码（对象–&gt;字节流）；在接收到外部消息的时候会对字节流进行解码（字节流–&gt;对象）。</p>
+<p><img src="./image/RemotingCommand.png" alt=""></p>
+<p>业务层与Netty之间交互方式的伪代码：</p>
+<ul>
+<li>准备消息头，CommandCustomHeader，“通信协议”，不同场景下，例如发送消息和请求消息，携带的信息不一样。约定好的协议。</li>
+<li>准备消息体，body</li>
+<li>使用消息头和消息体创建RemotingCommand对象</li>
+<li>调用Netty进行发送</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">----经过业务层构建处理的消息体Header/body----</span><br><span class="line">header = ...;</span><br><span class="line">body = ...;</span><br><span class="line">----准备RemotingCommand----</span><br><span class="line">remotingCommand = <span class="keyword">new</span> RemotingCommand();</span><br><span class="line">remotingCommand.setCustomerHeader(header);</span><br><span class="line">remotingCommand.setBody(body);</span><br><span class="line">----调用Netty发送RemotingCommand----</span><br><span class="line">Netty.send(remotingCommand);</span><br></pre></td></tr></table></figure>
+
+<h2 id="2-编码"><a href="#2-编码" class="headerlink" title="2 编码"></a>2 编码</h2><p>Netty会用<code>NettyEncoder</code>对对象进行编码。该类的源码如下，它继承了Netty中的<code>MessageToByteEncoder</code>。覆写了<code>encode()</code>方法。它的泛型变量为<code>RemotingCommand</code>表示它只处理传递过来的<code>RemotingCommand</code>的对象。</p>
+<p>它里面的编码逻辑，首先对消息头进行编码，然后编码消息体。消息体其实已经是字节流了，直接写入ByteBuf中即可。而需要对消息头进行编码。对消息头编码时调用的是<code>RemotingCommand</code>的<code>encodeHeader()</code>方法。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">NettyEncoder</span> <span class="keyword">extends</span> <span class="title">MessageToByteEncoder</span>&lt;<span class="title">RemotingCommand</span>&gt; </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">encode</span><span class="params">(ChannelHandlerContext ctx, RemotingCommand remotingCommand, ByteBuf out)</span></span></span><br><span class="line"><span class="function">            <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="comment">// 编码头部</span></span><br><span class="line">            ByteBuffer header = remotingCommand.encodeHeader();</span><br><span class="line">            out.writeBytes(header);</span><br><span class="line">            <span class="comment">// 之前已经编码好了，即已经是二进制了</span></span><br><span class="line">            <span class="keyword">byte</span>[] body = remotingCommand.getBody();</span><br><span class="line">            <span class="keyword">if</span> (body != <span class="keyword">null</span>) &#123;</span><br><span class="line">                out.writeBytes(body);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">            log.error(<span class="string">"encode exception, "</span> + RemotingHelper.parseChannelRemoteAddr(ctx.channel()), e);</span><br><span class="line">            <span class="keyword">if</span> (remotingCommand != <span class="keyword">null</span>) &#123;</span><br><span class="line">                log.error(remotingCommand.toString());</span><br><span class="line">            &#125;</span><br><span class="line">            RemotingUtil.closeChannel(ctx.channel());</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="3-解码"><a href="#3-解码" class="headerlink" title="3 解码"></a>3 解码</h2><p>如下是<code>NettyDecoder</code>的源代码，它继承了<code>LengthFieldBasedFrameDecoder</code>，表明它解决TCP粘包和拆包的方式为长度基础方式。</p>
+<p>里面的逻辑很简单，从网络通道读取到数据，然后调用<code>RemotingCommand</code>的静态解码方法<code>decode</code>进行解码，返回一个<code>RemotingCommand</code>对象。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">NettyDecoder</span> <span class="keyword">extends</span> <span class="title">LengthFieldBasedFrameDecoder</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> FRAME_MAX_LENGTH =</span><br><span class="line">        Integer.parseInt(System.getProperty(<span class="string">"com.rocketmq.remoting.frameMaxLength"</span>, <span class="string">"16777216"</span>));</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">NettyDecoder</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">super</span>(FRAME_MAX_LENGTH, <span class="number">0</span>, <span class="number">4</span>, <span class="number">0</span>, <span class="number">4</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Object <span class="title">decode</span><span class="params">(ChannelHandlerContext ctx, ByteBuf in)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">        ByteBuf frame = <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            frame = (ByteBuf) <span class="keyword">super</span>.decode(ctx, in);</span><br><span class="line">            <span class="keyword">if</span> (<span class="keyword">null</span> == frame) &#123;</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            ByteBuffer byteBuffer = frame.nioBuffer();</span><br><span class="line">            <span class="comment">// 直接调用RemotingCommand进行解码</span></span><br><span class="line">            <span class="keyword">return</span> RemotingCommand.decode(byteBuffer);</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">            log.error(<span class="string">"decode exception, "</span> + RemotingHelper.parseChannelRemoteAddr(ctx.channel()), e);</span><br><span class="line">            RemotingUtil.closeChannel(ctx.channel());</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (<span class="keyword">null</span> != frame) &#123;</span><br><span class="line">                frame.release();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+<h2 id="4-RemotingCommand"><a href="#4-RemotingCommand" class="headerlink" title="4 RemotingCommand"></a>4 RemotingCommand</h2><p>RemotingCommand的成员属性。其中customeHeader表示消息头，body表示消息体，它是不进行序列化。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RemotingCommand</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 请求码</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> code;</span><br><span class="line">    <span class="keyword">private</span> LanguageCode language = LanguageCode.JAVA;</span><br><span class="line">    <span class="comment">// 版本</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> version = <span class="number">0</span>;</span><br><span class="line">    <span class="comment">// 递增</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> opaque = requestId.getAndIncrement();</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> flag = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">private</span> String remark;</span><br><span class="line">    <span class="keyword">private</span> HashMap&lt;String, String&gt; extFields;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 消息头</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">transient</span> CommandCustomHeader customHeader;</span><br><span class="line">    <span class="keyword">private</span> SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 不进行序列化</span></span><br><span class="line">    <span class="comment">// 消息体</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">transient</span> <span class="keyword">byte</span>[] body;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="4-1-编码消息头"><a href="#4-1-编码消息头" class="headerlink" title="4.1 编码消息头"></a>4.1 编码消息头</h3><p>最终结果就是将RemotingCommand对象进行序列化，而customeHeader的属性以及值会被放到RemotinCommand的<code>extFields</code>之中，之后随RemotingCommand一起序列化成字节码。</p>
+<p>首先确定消息体的长度。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ByteBuffer <span class="title">encodeHeader</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> encodeHeader(<span class="keyword">this</span>.body != <span class="keyword">null</span> ? <span class="keyword">this</span>.body.length : <span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ByteBuffer <span class="title">encodeHeader</span><span class="params">(<span class="keyword">final</span> <span class="keyword">int</span> bodyLength)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 1&gt; header length size</span></span><br><span class="line">    <span class="keyword">int</span> length = <span class="number">4</span>;</span><br><span class="line">    <span class="comment">// 2&gt; header data length</span></span><br><span class="line">    <span class="keyword">byte</span>[] headerData;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 【！！！】真正的编码</span></span><br><span class="line">    headerData = <span class="keyword">this</span>.headerEncode();</span><br><span class="line"></span><br><span class="line">    length += headerData.length;</span><br><span class="line">    <span class="comment">// 3&gt; body data length</span></span><br><span class="line">    length += bodyLength;</span><br><span class="line">    ByteBuffer result = ByteBuffer.allocate(<span class="number">4</span> + length - bodyLength);</span><br><span class="line">    <span class="comment">// length</span></span><br><span class="line">    result.putInt(length);</span><br><span class="line">    <span class="comment">// header length</span></span><br><span class="line">    result.put(markProtocolType(headerData.length, serializeTypeCurrentRPC));</span><br><span class="line">    <span class="comment">// header data</span></span><br><span class="line">    result.put(headerData);</span><br><span class="line">    result.flip();</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先将customeHeader中的属性放到RemotingCommand的属性<code>extFields</code>之中，是一个<code>map&lt;fildName,fieldValue&gt;</code>。</p>
+<p>然后根据设置序列的方式采用不同的编码方式，其实就是序列化RemotingCommand对象本身。主要是<code>RocketMQ</code>自定义的协议，或者采用<code>json</code>的方式。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">byte</span>[] headerEncode() &#123;</span><br><span class="line">    <span class="comment">// 【!!!!!】提取customHeader的成员变量</span></span><br><span class="line">    <span class="comment">// 放到RemotingCommand的extFieldsmap之中</span></span><br><span class="line">    <span class="keyword">this</span>.makeCustomHeaderToNet();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 使用不同的协议序列化RemotingCommand对象</span></span><br><span class="line">    <span class="keyword">if</span> (SerializeType.ROCKETMQ == serializeTypeCurrentRPC) &#123;</span><br><span class="line">        <span class="keyword">return</span> RocketMQSerializable.rocketMQProtocolEncode(<span class="keyword">this</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> RemotingSerializable.encode(<span class="keyword">this</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="4-2-解码"><a href="#4-2-解码" class="headerlink" title="4.2 解码"></a>4.2 解码</h3><p>最终结果是就是将字节码还原为一个<code>RemotingCommand</code>对象。并设置<code>customeHeader</code>和<code>body</code>的值</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> RemotingCommand <span class="title">decode</span><span class="params">(<span class="keyword">final</span> <span class="keyword">byte</span>[] array)</span> </span>&#123;</span><br><span class="line">    ByteBuffer byteBuffer = ByteBuffer.wrap(array);</span><br><span class="line">    <span class="keyword">return</span> decode(byteBuffer);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> RemotingCommand <span class="title">decode</span><span class="params">(<span class="keyword">final</span> ByteBuffer byteBuffer)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> length = byteBuffer.limit();</span><br><span class="line">    <span class="keyword">int</span> oriHeaderLen = byteBuffer.getInt();</span><br><span class="line">    <span class="keyword">int</span> headerLength = getHeaderLength(oriHeaderLen);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 读取头部数据</span></span><br><span class="line">    <span class="keyword">byte</span>[] headerData = <span class="keyword">new</span> <span class="keyword">byte</span>[headerLength];</span><br><span class="line">    byteBuffer.get(headerData);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 【！！！！】解码头部并达到RemotingCommand</span></span><br><span class="line">    RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> bodyLength = length - <span class="number">4</span> - headerLength;</span><br><span class="line">    <span class="keyword">byte</span>[] bodyData = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">if</span> (bodyLength &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="comment">// 获取到body数据，至于body数据的解码放在了后面进行</span></span><br><span class="line">        bodyData = <span class="keyword">new</span> <span class="keyword">byte</span>[bodyLength];</span><br><span class="line">        byteBuffer.get(bodyData);</span><br><span class="line">    &#125;</span><br><span class="line">    cmd.body = bodyData;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> cmd;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">static</span> RemotingCommand <span class="title">headerDecode</span><span class="params">(<span class="keyword">byte</span>[] headerData, SerializeType type)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">switch</span> (type) &#123;</span><br><span class="line">        <span class="comment">// 调用相应的序列化方式进行解码</span></span><br><span class="line">        <span class="keyword">case</span> JSON:</span><br><span class="line">            <span class="comment">// 还原为RemotingCommand对象</span></span><br><span class="line">            RemotingCommand resultJson = RemotingSerializable.decode(headerData, RemotingCommand<span class="class">.<span class="keyword">class</span>)</span>;</span><br><span class="line">            resultJson.setSerializeTypeCurrentRPC(type);</span><br><span class="line">            <span class="keyword">return</span> resultJson;</span><br><span class="line">        <span class="keyword">case</span> ROCKETMQ:</span><br><span class="line">            RemotingCommand resultRMQ = RocketMQSerializable.rocketMQProtocolDecode(headerData);</span><br><span class="line">            resultRMQ.setSerializeTypeCurrentRPC(type);</span><br><span class="line">            <span class="keyword">return</span> resultRMQ;</span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="5-通信协议"><a href="#5-通信协议" class="headerlink" title="5 通信协议"></a>5 通信协议</h2><p>在传递消息的时候会创建一个协议头customeHeader，不同场景下会使用不同的协议头。</p>
+<p>协议头都实现了一个公共的接口<code>CommandCustomHeader</code>。它的实现者有很多。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">interface</span> <span class="title">CommandCustomHeader</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">checkFields</span><span class="params">()</span> <span class="keyword">throws</span> RemotingCommandException</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><img src="image/CommandCustomHeader.png" alt=""></p>
+
+      
+    </div>
+    <div class="article-footer">
+      <blockquote class="mt-2x">
+  <ul class="post-copyright list-unstyled">
+    
+    <li class="post-copyright-link hidden-xs">
+      <strong>本文链接：</strong>
+      <a href="http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" title="我理解的RocketMQ—网络层的通信协议" target="_blank" rel="external">http://yoursite.com/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/</a>
+    </li>
+    
+    <li class="post-copyright-license">
+      <strong>版权声明： </strong> 本博客所有文章除特别声明外，均采用 <a href="http://creativecommons.org/licenses/by/4.0/deed.zh" target="_blank" rel="external">CC BY 4.0 CN协议</a> 许可协议。转载请注明出处！
+    </li>
+  </ul>
+</blockquote>
+
+
+<div class="panel panel-default panel-badger">
+  <div class="panel-body">
+    <figure class="media">
+      <div class="media-left">
+        <a href="https://github.com/xiaojkql" target="_blank" class="img-burn thumb-sm visible-lg">
+          <img src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" class="img-rounded w-full" alt="">
+        </a>
+      </div>
+      <div class="media-body">
+        <h3 class="media-heading"><a href="https://github.com/xiaojkql" target="_blank"><span class="text-dark">覃缘</span><small class="ml-1x">Java开发工程师</small></a></h3>
+        <div>破釜沉舟，百二秦关终属楚。</div>
+      </div>
+    </figure>
+  </div>
+</div>
+
+
+    </div>
+  </article>
+  
+    
+  <section id="comments">
+  	
+           
+    
+  </section>
+
+
+  
+</div>
+
+  <nav class="bar bar-footer clearfix" data-stick-bottom>
+  <div class="bar-inner">
+  
+  <ul class="pager pull-left">
+    
+    <li class="prev">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" title="我理解的RocketMQ—消费者负载均衡的实现"><i class="icon icon-angle-left" aria-hidden="true"></i><span>&nbsp;&nbsp;上一篇</span></a>
+    </li>
+    
+    
+    <li class="next">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" title="我理解的RocketMQ-同步发送消息源码分析"><span>下一篇&nbsp;&nbsp;</span><i class="icon icon-angle-right" aria-hidden="true"></i></a>
+    </li>
+    
+    
+    <li class="toggle-toc">
+      <a class="toggle-btn collapsed" data-toggle="collapse" href="#collapseToc" aria-expanded="false" title="文章目录" role="button">
+        <span>[&nbsp;</span><span>文章目录</span>
+        <i class="text-collapsed icon icon-anchor"></i>
+        <i class="text-in icon icon-close"></i>
+        <span>]</span>
+      </a>
+    </li>
+    
+  </ul>
+  
+  
+  
+  <div class="bar-right">
+    
+  </div>
+  </div>
+</nav>
+  
+
+
+</main>
+
+  <footer class="footer" itemscope itemtype="http://schema.org/WPFooter">
+	
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    <div class="copyright">
+    	
+        <div class="publishby">
+        	Theme by <a href="https://github.com/cofess" target="_blank"> cofess </a>base on <a href="https://github.com/cofess/hexo-theme-pure" target="_blank">pure</a>.
+        </div>
+    </div>
+</footer>
+  <script src="//cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+<script>
+window.jQuery || document.write('<script src="js/jquery.min.js"><\/script>')
+</script>
+
+<script src="/js/plugin.min.js"></script>
+
+
+<script src="/js/application.js"></script>
+
+
+    <script>
+(function (window) {
+    var INSIGHT_CONFIG = {
+        TRANSLATION: {
+            POSTS: '文章',
+            PAGES: '页面',
+            CATEGORIES: '分类',
+            TAGS: '标签',
+            UNTITLED: '(未命名)',
+        },
+        ROOT_URL: '/',
+        CONTENT_URL: '/content.json',
+    };
+    window.INSIGHT_CONFIG = INSIGHT_CONFIG;
+})(window);
+</script>
+
+<script src="/js/insight.js"></script>
+
+
+
+
+
+
+   
+
+
+
+
+   
+    
+  <!-- <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css"> -->
+  <script src="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+  <script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '',
+    clientSecret: '',
+    repo: '',
+    owner: '',
+    admin: [''],
+    id: md5(location.pathname),
+    distractionFreeMode: true
+  })
+  gitalk.render('comments')
+  </script>
+
+      
+
+
+
+  <script src="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.js"></script>
+  <script>
+  //利用 FancyBox 实现点击图片放大
+  $(document).ready(function() {
+    $('article img').not('[hidden]').not('.panel-body img').each(function() {
+      var $image = $(this);
+      var imageCaption = $image.attr('alt');
+      var $imageWrapLink = $image.parent('a');
+      if ($imageWrapLink.length < 1) {
+        var src = this.getAttribute('src');
+        var idx = src.lastIndexOf('?');
+        if (idx != -1) {
+          src = src.substring(0, idx);
+        }
+        $imageWrapLink = $image.wrap('<a href="' + src + '"></a>').parent('a');
+      }
+      $imageWrapLink.attr('data-fancybox', 'images');
+      if (imageCaption) {
+        $imageWrapLink.attr('data-caption', imageCaption);
+      }
+    });
+    $().fancybox({
+      selector: '[data-fancybox="images"]',
+      hash: false,
+      loop: false,
+    });
+  });
+  </script>
+
+
+
+
+
+</body>
+</html>
