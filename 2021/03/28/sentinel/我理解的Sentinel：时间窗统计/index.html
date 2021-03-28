@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+  <meta charset="utf-8">
+  
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="Cache-Control" content="no-transform" />
+  <meta http-equiv="Cache-Control" content="no-siteapp" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="format-detection" content="telephone=no,email=no,adress=no">
+  <!-- Color theme for statusbar -->
+  <meta name="theme-color" content="#000000" />
+  <!-- 强制页面在当前窗口以独立页面显示,防止别人在框架里调用页面 -->
+  <meta http-equiv="window-target" content="_top" />
+  
+  
+  <title>我理解的Sentinel：时间窗统计 | xiaojkql</title>
+  <meta name="description" content="1 时间窗口基础参数:  intervalLength: 区间长度，即统计的时间长度，决定了计算数据时统计的窗口个数 windowLength：时间窗宽度 count：时间窗内统计量 startTime: 每个时间窗的起始时间  如下图所示，每个时间点都会归属于一个时间窗口，即会将时间轴按照时间窗宽度windowLength进行划分。每个时间窗都有一个起始时间startTime。  获取某个时间的">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我理解的Sentinel：时间窗统计">
+<meta property="og:url" content="http://yoursite.com/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1 时间窗口基础参数:  intervalLength: 区间长度，即统计的时间长度，决定了计算数据时统计的窗口个数 windowLength：时间窗宽度 count：时间窗内统计量 startTime: 每个时间窗的起始时间  如下图所示，每个时间点都会归属于一个时间窗口，即会将时间轴按照时间窗宽度windowLength进行划分。每个时间窗都有一个起始时间startTime。  获取某个时间的">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210214002527792.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210214002547892.png#pic_center">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210214002607230.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210214002629369.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
+<meta property="article:published_time" content="2021-03-28T05:08:01.407Z">
+<meta property="article:modified_time" content="2021-03-28T05:09:26.495Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="java">
+<meta property="article:tag" content="Sentinel">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/20210214002527792.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center">
+  <!-- Canonical links -->
+  <link rel="canonical" href="http://yoursite.com/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/index.html">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png" type="image/x-icon">
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+  
+  
+    <link href="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.css" rel="stylesheet">
+  
+  
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.css">
+  
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+
+<body class="main-center no-sidebar" itemscope itemtype="http://schema.org/WebPage">
+  <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+  <div class="slimContent">
+    <div class="navbar-header">
+      
+      
+      <div class="profile-block text-center">
+        <a id="avatar" href="https://github.com/xiaojkql" target="_blank">
+          <img class="img-circle img-rotate" src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" width="200" height="200">
+        </a>
+        <h2 id="name" class="hidden-xs hidden-sm">覃缘</h2>
+        <h3 id="title" class="hidden-xs hidden-sm hidden-md">Java开发工程师</h3>
+        <small id="location" class="text-muted hidden-xs hidden-sm"><i class="icon icon-map-marker"></i> Shenzhen, China</small>
+      </div>
+      
+      <div class="search" id="search-form-wrap">
+
+    <form class="search-form sidebar-form">
+        <div class="input-group">
+            <input type="text" class="search-form-input form-control" placeholder="搜索" />
+            <span class="input-group-btn">
+                <button type="submit" class="search-form-submit btn btn-flat" onclick="return false;"><i class="icon icon-search"></i></button>
+            </span>
+        </div>
+    </form>
+    <div class="ins-search">
+  <div class="ins-search-mask"></div>
+  <div class="ins-search-container">
+    <div class="ins-input-wrapper">
+      <input type="text" class="ins-search-input" placeholder="想要查找什么..." x-webkit-speech />
+      <button type="button" class="close ins-close ins-selectable" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+    </div>
+    <div class="ins-section-wrapper">
+      <div class="ins-section-container"></div>
+    </div>
+  </div>
+</div>
+
+
+</div>
+      <button class="navbar-toggle collapsed" type="button" data-toggle="collapse" data-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <nav id="main-navbar" class="collapse navbar-collapse" itemscope itemtype="http://schema.org/SiteNavigationElement" role="navigation">
+      <ul class="nav navbar-nav main-nav ">
+        
+        
+        <li class="menu-item menu-item-home">
+          <a href="/.">
+            
+            <i class="icon icon-home-fill"></i>
+            
+            <span class="menu-title">首页</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives">
+            
+            <i class="icon icon-archives-fill"></i>
+            
+            <span class="menu-title">归档</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories">
+            
+            <i class="icon icon-folder"></i>
+            
+            <span class="menu-title">分类</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags">
+            
+            <i class="icon icon-tags"></i>
+            
+            <span class="menu-title">标签</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-books">
+          <a href="/books">
+            
+            <i class="icon icon-book-fill"></i>
+            
+            <span class="menu-title">书单</span>
+          </a>
+        </li>
+        
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about">
+            
+            <i class="icon icon-cup-fill"></i>
+            
+            <span class="menu-title">关于</span>
+          </a>
+        </li>
+        
+      </ul>
+      
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    </nav>
+  </div>
+</header>
+
+  
+    <aside class="sidebar" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    
+      <div class="widget">
+    <h3 class="widget-title">公告</h3>
+    <div class="widget-body">
+        <div id="board">
+            <div class="content">
+                <p>欢迎交流与分享经验!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget-body">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/RocketMQ/">RocketMQ</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Sentinel/">Sentinel</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/hexo/">hexo</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/java-basic/">java-basic</a><span class="category-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget-body">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/RocketMQ/" rel="tag">RocketMQ</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Sentinel/" rel="tag">Sentinel</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/basic/" rel="tag">basic</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/hexo/" rel="tag">hexo</a><span class="tag-list-count">2</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/java/" rel="tag">java</a><span class="tag-list-count">7</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget-body tagcloud">
+      <a href="/tags/RocketMQ/" style="font-size: 13.67px;">RocketMQ</a> <a href="/tags/Sentinel/" style="font-size: 13px;">Sentinel</a> <a href="/tags/basic/" style="font-size: 13px;">basic</a> <a href="/tags/hexo/" style="font-size: 13.33px;">hexo</a> <a href="/tags/java/" style="font-size: 14px;">java</a>
+    </div>
+  </div>
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget-body">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/03/">三月 2021</a><span class="archive-list-count">5</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/01/">一月 2021</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/11/">十一月 2020</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/06/">六月 2020</a><span class="archive-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+
+    
+      
+  <div class="widget">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget-body">
+      <ul class="recent-post-list list-unstyled ">
+        
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/Sentinel/">Sentinel</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/" class="title">我理解的Sentinel：时间窗统计</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T05:08:01.407Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ—消息偏移量管理分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:03.000Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E8%B4%B9%E8%80%85%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E5%AE%9E%E7%8E%B0/" class="title">我理解的RocketMQ—消费者负载均衡的实现</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.995Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E7%BD%91%E7%BB%9C%E5%B1%82%E7%9A%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/" class="title">我理解的RocketMQ—网络层的通信协议</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.990Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+          <li>
+            
+            <div class="item-thumb">
+              <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="thumb">
+    
+    
+        <span class="thumb-image thumb-none"></span>
+    
+</a>
+
+            </div>
+            
+            <div class="item-inner">
+              <p class="item-category">
+                <a class="category-link" href="/categories/RocketMQ/">RocketMQ</a>
+              </p>
+              <p class="item-title">
+                <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ-%E5%90%8C%E6%AD%A5%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" class="title">我理解的RocketMQ-同步发送消息源码分析</a>
+              </p>
+              <p class="item-date">
+                <time datetime="2021-03-28T04:55:02.981Z" itemprop="datePublished">2021-03-28</time>
+              </p>
+            </div>
+          </li>
+          
+      </ul>
+    </div>
+  </div>
+  
+
+    
+  </div>
+</aside>
+
+  
+  
+<aside class="sidebar sidebar-toc collapse" id="collapseToc" itemscope itemtype="http://schema.org/WPSideBar">
+  <div class="slimContent">
+    <nav id="toc" class="article-toc">
+      <h3 class="toc-title">文章目录</h3>
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-时间窗口基础"><span class="toc-number">1.</span> <span class="toc-text">1 时间窗口基础</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-sentinel中时间窗的实现"><span class="toc-number">2.</span> <span class="toc-text">2 sentinel中时间窗的实现</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-统计的量"><span class="toc-number">2.1.</span> <span class="toc-text">2.1 统计的量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-对外提供使用的类"><span class="toc-number">2.2.</span> <span class="toc-text">2.2 对外提供使用的类</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3-底层实现"><span class="toc-number">2.3.</span> <span class="toc-text">2.3 底层实现</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#2-3-1-更新当前时间点某个统计量"><span class="toc-number">2.3.1.</span> <span class="toc-text">2.3.1 更新当前时间点某个统计量</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2-3-2-获取某个统计值"><span class="toc-number">2.3.2.</span> <span class="toc-text">2.3.2 获取某个统计值</span></a></li></ol></li></ol></li></ol>
+    </nav>
+  </div>
+</aside>
+
+<main class="main" role="main">
+  <div class="content">
+  <article id="post-sentinel/我理解的Sentinel：时间窗统计" class="article article-type-post" itemscope itemtype="http://schema.org/BlogPosting">
+    
+    <div class="article-header">
+      
+        
+  
+    <h1 class="article-title" itemprop="name">
+      我理解的Sentinel：时间窗统计
+    </h1>
+  
+
+      
+      <div class="article-meta">
+        <span class="article-date">
+    <i class="icon icon-calendar-check"></i>
+	<a href="/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/" class="article-date">
+	  <time datetime="2021-03-28T05:08:01.407Z" itemprop="datePublished">2021-03-28</time>
+	</a>
+</span>
+        
+  <span class="article-category">
+    <i class="icon icon-folder"></i>
+    <a class="article-category-link" href="/categories/Sentinel/">Sentinel</a>
+  </span>
+
+        
+  <span class="article-tag">
+    <i class="icon icon-tags"></i>
+	<a class="article-tag-link" href="/tags/Sentinel/" rel="tag">Sentinel</a>, <a class="article-tag-link" href="/tags/java/" rel="tag">java</a>
+  </span>
+
+
+        
+
+        <span class="post-comment"><i class="icon icon-comment"></i> <a href="/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/#comments" class="article-comment-link">评论</a></span>
+        
+      </div>
+    </div>
+    <div class="article-entry marked-body" itemprop="articleBody">
+      
+        <h2 id="1-时间窗口基础"><a href="#1-时间窗口基础" class="headerlink" title="1 时间窗口基础"></a>1 时间窗口基础</h2><p>参数:</p>
+<ul>
+<li>intervalLength: 区间长度，即统计的时间长度，决定了计算数据时统计的窗口个数</li>
+<li>windowLength：时间窗宽度</li>
+<li>count：时间窗内统计量</li>
+<li>startTime: 每个时间窗的起始时间</li>
+</ul>
+<p>如下图所示，每个时间点都会归属于一个时间窗口，即会将时间轴按照时间窗宽度<code>windowLength</code>进行划分。每个时间窗都有一个起始时间<code>startTime</code>。</p>
+<p><img src="https://img-blog.csdnimg.cn/20210214002527792.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述"></p>
+<p>获取某个时间的统计量</p>
+<ul>
+<li>获取当前时间currTime</li>
+<li>根据currTime - (已用时间窗).startTime &lt; intervalLength，找到参与统计时间窗</li>
+<li>对参与时间窗的统计量count进行求和即可得到当前时间的统计量</li>
+</ul>
+<p>更新某个时间的统计量</p>
+<ul>
+<li>获取当前时间currTime</li>
+<li>找到当前时间所属的时间窗，更新时间窗里面的count</li>
+</ul>
+<p>上面的图示是在整个时间轴上进行划分的，有无穷多个时间窗。但是在具体实现上是不可能表示出无穷个时间窗的，所以实现时会使用一个固定大小的时间窗数组。采用复用/循环存储时间窗的方式。<strong>依据：在某个时间点只需要统计某几个时间窗的数据即可，而不需要知道所有时间窗的数据</strong>，所以只保存需要的几个时间窗</p>
+<p>此时多了一个参数<code>sampleCount</code>，数组的大小就是<code>sampleCount</code>。</p>
+<p>关系：<code>sampleCount</code>=<code>intervalLength / windowLength</code></p>
+<p><img src="https://img-blog.csdnimg.cn/20210214002547892.png#pic_center" alt="在这里插入图片描述"></p>
+<p>更新某个时间点处的统计量：</p>
+<ul>
+<li>获取当前时间currTime</li>
+<li>计算当前时间点所属时间窗在数组中位置index = (currTime / windowLength) % sampleCount</li>
+<li>获取时间窗window = array[index]</li>
+<li>判断时间窗是否已过期：currTime - 时间窗.startTime &gt; intervalLength；已过期则重置时间窗口，即将里面的统计量count归零，然后累加count；未过期直接累加count。</li>
+</ul>
+<p>获取某个时间点的统计量</p>
+<ul>
+<li>获取当前时间currTime</li>
+<li>遍历时间窗数组，判断时间窗是否该统计：currTime - 时间窗.startTime &lt; intervalLength</li>
+</ul>
+<h2 id="2-sentinel中时间窗的实现"><a href="#2-sentinel中时间窗的实现" class="headerlink" title="2 sentinel中时间窗的实现"></a>2 sentinel中时间窗的实现</h2><p>主要的几个类：</p>
+<ul>
+<li><code>LeapArray</code> 时间窗的底层实现，里面有一个时间窗的数组，数组里面的元素为<code>WindowWrap</code>，即时间窗</li>
+<li><code>WindowWrap&lt;T&gt;</code> 时间窗，T表示要统计的数据，为<code>MetricBucket</code></li>
+<li><code>MetricBucket</code> 统计量，里面包含了多个具体统计的变量，变量的”类型”由<code>MetrciEvent</code>决定</li>
+<li><code>MetricEvent</code> 统计量类型，和MetricBucktet里面保存的统计变量一一对应</li>
+<li><code>ArrayMetric</code> 对外使用的类，隐藏了时间窗的具体实现，其有一个成员变量<code>LeapArray</code></li>
+</ul>
+<p>几个类之间的关系：</p>
+<p><img src="https://img-blog.csdnimg.cn/20210214002607230.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述"></p>
+<h3 id="2-1-统计的量"><a href="#2-1-统计的量" class="headerlink" title="2.1 统计的量"></a>2.1 统计的量</h3><p>需要统计的量在MetricEvent这个枚举变量表示</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">enum</span> MetricEvent &#123;</span><br><span class="line">    PASS,</span><br><span class="line">    BLOCK,</span><br><span class="line">    EXCEPTION,</span><br><span class="line">    SUCCESS,</span><br><span class="line">    RT,</span><br><span class="line">    OCCUPIED_PASS</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-2-对外提供使用的类"><a href="#2-2-对外提供使用的类" class="headerlink" title="2.2 对外提供使用的类"></a>2.2 对外提供使用的类</h3><p>典型用法：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 创建实例，两个值：2-sampleCount 1000-统计的区间大小</span></span><br><span class="line">arrayMetric = <span class="keyword">new</span> ArrayMtric(<span class="number">2</span>, <span class="number">1000</span>);</span><br><span class="line"></span><br><span class="line"><span class="comment">// 增加某个统计量的值</span></span><br><span class="line">arrayMetric.addXXX(n);</span><br><span class="line"></span><br><span class="line"><span class="comment">// 获取某个统计量的值</span></span><br><span class="line">arrayMetric.XXX()</span><br></pre></td></tr></table></figure>
+
+<p>当要使用时间窗进行统计时，对外提供的就是<code>ArrayMetric</code>。它隐藏了具体的时间窗的实现。</p>
+<p>它有一个成员变量：<code>data=LeapArray&lt;MetrciBucket&gt;</code>即底层的时间窗实现类。</p>
+<p>在某个时间点需要增加某个统计量的值，就调用<code>addXXX</code>类型的<code>API</code></p>
+<p>在某个时间点需要获取某个统计量的值，就调用<code>xxx()</code>类型的<code>API</code></p>
+<p><img src="https://img-blog.csdnimg.cn/20210214002629369.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3hpYW9qa3Fs,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述"></p>
+<h3 id="2-3-底层实现"><a href="#2-3-底层实现" class="headerlink" title="2.3 底层实现"></a>2.3 底层实现</h3><p>主要分析两个操作：</p>
+<ul>
+<li>更新值</li>
+<li>获取值</li>
+</ul>
+<p>首先是时间窗轮转数组<code>LeapArray</code>，它是整个时间窗组件的主类。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">abstract</span> <span class="class"><span class="keyword">class</span> <span class="title">LeapArray</span>&lt;<span class="title">T</span>&gt; </span>&#123;</span><br><span class="line">    <span class="comment">// 时间窗的大小</span></span><br><span class="line">    <span class="keyword">protected</span> <span class="keyword">int</span> windowLengthInMs;</span><br><span class="line">    <span class="comment">// 采样数，即将统计区间划分成几等份</span></span><br><span class="line">    <span class="keyword">protected</span> <span class="keyword">int</span> sampleCount;</span><br><span class="line">    <span class="comment">// 统计区间</span></span><br><span class="line">    <span class="keyword">protected</span> <span class="keyword">int</span> intervalInMs;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">double</span> intervalInSecond;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">protected</span> <span class="keyword">final</span> AtomicReferenceArray&lt;WindowWrap&lt;T&gt;&gt; array;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ReentrantLock updateLock = <span class="keyword">new</span> ReentrantLock();</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">LeapArray</span><span class="params">(<span class="keyword">int</span> sampleCount, <span class="keyword">int</span> intervalInMs)</span> </span>&#123;</span><br><span class="line">        AssertUtil.isTrue(sampleCount &gt; <span class="number">0</span>, <span class="string">"bucket count is invalid: "</span> + sampleCount);</span><br><span class="line">        AssertUtil.isTrue(intervalInMs &gt; <span class="number">0</span>, <span class="string">"total time interval of the sliding window should be positive"</span>);</span><br><span class="line">        AssertUtil.isTrue(intervalInMs % sampleCount == <span class="number">0</span>, <span class="string">"time span needs to be evenly divided"</span>);</span><br><span class="line">        <span class="comment">// 1000 / 2  60*1000/60 = 1000</span></span><br><span class="line">        <span class="keyword">this</span>.windowLengthInMs = intervalInMs / sampleCount;</span><br><span class="line">        <span class="comment">// 1000  60*1000 60秒</span></span><br><span class="line">        <span class="keyword">this</span>.intervalInMs = intervalInMs;</span><br><span class="line">        <span class="comment">// 1 60</span></span><br><span class="line">        <span class="keyword">this</span>.intervalInSecond = intervalInMs / <span class="number">1000.0</span>;</span><br><span class="line">        <span class="comment">// 2 60</span></span><br><span class="line">        <span class="keyword">this</span>.sampleCount = sampleCount;</span><br><span class="line">        <span class="comment">// 2</span></span><br><span class="line">        <span class="keyword">this</span>.array = <span class="keyword">new</span> AtomicReferenceArray&lt;&gt;(sampleCount);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="2-3-1-更新当前时间点某个统计量"><a href="#2-3-1-更新当前时间点某个统计量" class="headerlink" title="2.3.1 更新当前时间点某个统计量"></a>2.3.1 更新当前时间点某个统计量</h4><p>调用<code>ArrayMetric</code>的<code>addXXX()</code>方法，这里以<code>addPass()</code>为例。</p>
+<ul>
+<li>首先根据当前时间获取所属时间窗，即调用<code>LeapArray</code>的<code>currentWindow()</code>方法。在此方法里面就完成了时间窗的更新，时间窗数组的轮转，具体见<code>currentWindow()</code>方法。</li>
+<li>然后调用时间窗的里面的<code>metricBucket</code>更新<code>pass</code></li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">addPass</span><span class="params">(<span class="keyword">int</span> count)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取当前时间所属的时间窗</span></span><br><span class="line">    WindowWrap&lt;MetricBucket&gt; wrap = data.currentWindow();</span><br><span class="line">    <span class="comment">// </span></span><br><span class="line">    wrap.value().addPass(count);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>LeapArray</code>的<code>currentWindow()</code>方法，此方法很重要会更新数组各个位置的时间窗为最新的时间窗，更新即重置时间窗的起始时间以及将里面的统计量进行归零。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> WindowWrap&lt;T&gt; <span class="title">currentWindow</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> currentWindow(TimeUtil.currentTimeMillis());</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> WindowWrap&lt;T&gt; <span class="title">currentWindow</span><span class="params">(<span class="keyword">long</span> timeMillis)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (timeMillis &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 计算当前时间对应的时间窗在数组中的位置：</span></span><br><span class="line">    <span class="comment">//</span></span><br><span class="line">    <span class="comment">//private int calculateTimeIdx(/*@Valid*/ long timeMillis) &#123;</span></span><br><span class="line">    <span class="comment">//    long timeId = timeMillis / windowLengthInMs;</span></span><br><span class="line">    <span class="comment">//    Calculate current index so we can map the timestamp to the leap array.</span></span><br><span class="line">    <span class="comment">//    return (int)(timeId % array.length());</span></span><br><span class="line">    <span class="comment">// &#125;</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">int</span> idx = calculateTimeIdx(timeMillis);</span><br><span class="line">    <span class="comment">// Calculate current bucket start time.</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 计算时间窗的起始时间</span></span><br><span class="line">    <span class="comment">// protected long calculateWindowStart(/*@Valid*/ long timeMillis) &#123;</span></span><br><span class="line">    <span class="comment">//    return timeMillis - timeMillis % windowLengthInMs;</span></span><br><span class="line">    <span class="comment">//  &#125;</span></span><br><span class="line">    <span class="keyword">long</span> windowStart = calculateWindowStart(timeMillis);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">        <span class="comment">// 从时间窗数组里面获取时间窗</span></span><br><span class="line">        WindowWrap&lt;T&gt; old = array.get(idx);</span><br><span class="line">        <span class="keyword">if</span> (old == <span class="keyword">null</span>) &#123;</span><br><span class="line">            <span class="comment">// 如果为空则创建一个新的时间窗</span></span><br><span class="line">            WindowWrap&lt;T&gt; window = <span class="keyword">new</span> WindowWrap&lt;T&gt;(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));</span><br><span class="line">            <span class="comment">// 使用cas方法</span></span><br><span class="line">            <span class="keyword">if</span> (array.compareAndSet(idx, <span class="keyword">null</span>, window)) &#123;</span><br><span class="line">                <span class="comment">// Successfully updated, return the created bucket.</span></span><br><span class="line">                <span class="keyword">return</span> window;</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="comment">// Contention failed, the thread will yield its time slice to wait for bucket available.</span></span><br><span class="line">                Thread.yield();</span><br><span class="line">            &#125;</span><br><span class="line">        <span class="comment">// 如果时间窗的起始时间与当前时间所属时间窗的起始时间相等，那么就直接返回此时间窗</span></span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (windowStart == old.windowStart()) &#123;</span><br><span class="line">            </span><br><span class="line">            <span class="keyword">return</span> old;</span><br><span class="line">        <span class="comment">// 当前时间所属时间窗的起始时间大于获取到的时间窗的起始时间</span></span><br><span class="line">        <span class="comment">// 则更新获取到的时间起始时间，以及重置时间窗里面的统计量的值</span></span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (windowStart &gt; old.windowStart()) &#123;</span><br><span class="line">            </span><br><span class="line">            <span class="comment">// 加锁</span></span><br><span class="line">            <span class="keyword">if</span> (updateLock.tryLock()) &#123;</span><br><span class="line">                <span class="keyword">try</span> &#123;</span><br><span class="line">                    <span class="comment">// Successfully get the update lock, now we reset the bucket.</span></span><br><span class="line">                    <span class="keyword">return</span> resetWindowTo(old, windowStart);</span><br><span class="line">                &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                    updateLock.unlock();</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="comment">// Contention failed, the thread will yield its time slice to wait for bucket available.</span></span><br><span class="line">                Thread.yield();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (windowStart &lt; old.windowStart()) &#123;</span><br><span class="line">            <span class="comment">// Should not go through here, as the provided time is already behind.</span></span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">new</span> WindowWrap&lt;T&gt;(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="2-3-2-获取某个统计值"><a href="#2-3-2-获取某个统计值" class="headerlink" title="2.3.2 获取某个统计值"></a>2.3.2 获取某个统计值</h4><p>调用ArrayMetric的xxx()方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">long</span> <span class="title">pass</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取当前的时间窗口，实际上是更新时间窗</span></span><br><span class="line">    data.currentWindow();</span><br><span class="line">    <span class="keyword">long</span> pass = <span class="number">0</span>;</span><br><span class="line">    <span class="comment">// 获取需要进行统计的时间窗里面的MericBucket，这里返回的是List&lt;MetricBucket&gt;</span></span><br><span class="line">    <span class="comment">// 实际上也可以看成返回的是List&lt;WindowWrap&gt;</span></span><br><span class="line">    List&lt;MetricBucket&gt; list = data.values();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (MetricBucket window : list) &#123;</span><br><span class="line">        <span class="comment">// 遍历计量桶，进行累加，计算通过的值</span></span><br><span class="line">        pass += window.pass();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> pass;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>LeapArray</code>的<code>values()</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> List&lt;T&gt; <span class="title">values</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> values(TimeUtil.currentTimeMillis());</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> List&lt;T&gt; <span class="title">values</span><span class="params">(<span class="keyword">long</span> timeMillis)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (timeMillis &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> ArrayList&lt;T&gt;();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">int</span> size = array.length();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 初始化</span></span><br><span class="line">    List&lt;T&gt; result = <span class="keyword">new</span> ArrayList&lt;T&gt;(size);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 遍历时间窗数组，获取每一个元素</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; size; i++) &#123;</span><br><span class="line">        WindowWrap&lt;T&gt; windowWrap = array.get(i);</span><br><span class="line">        <span class="comment">// 对应的时间窗为空，或者不属于当前统计的区间</span></span><br><span class="line">        <span class="keyword">if</span> (windowWrap == <span class="keyword">null</span> || isWindowDeprecated(timeMillis, windowWrap)) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">// 在这里真正的加入值</span></span><br><span class="line">        result.add(windowWrap.value());</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">关键点：</span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">isWindowDeprecated</span><span class="params">(<span class="keyword">long</span> time, WindowWrap&lt;T&gt; windowWrap)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 当前时间值减去当前时间窗口的开始值 是否大于统计区间的值</span></span><br><span class="line">    <span class="keyword">return</span> time - windowWrap.windowStart() &gt; intervalInMs;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <div class="article-footer">
+      <blockquote class="mt-2x">
+  <ul class="post-copyright list-unstyled">
+    
+    <li class="post-copyright-link hidden-xs">
+      <strong>本文链接：</strong>
+      <a href="http://yoursite.com/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/" title="我理解的Sentinel：时间窗统计" target="_blank" rel="external">http://yoursite.com/2021/03/28/sentinel/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84Sentinel%EF%BC%9A%E6%97%B6%E9%97%B4%E7%AA%97%E7%BB%9F%E8%AE%A1/</a>
+    </li>
+    
+    <li class="post-copyright-license">
+      <strong>版权声明： </strong> 本博客所有文章除特别声明外，均采用 <a href="http://creativecommons.org/licenses/by/4.0/deed.zh" target="_blank" rel="external">CC BY 4.0 CN协议</a> 许可协议。转载请注明出处！
+    </li>
+  </ul>
+</blockquote>
+
+
+<div class="panel panel-default panel-badger">
+  <div class="panel-body">
+    <figure class="media">
+      <div class="media-left">
+        <a href="https://github.com/xiaojkql" target="_blank" class="img-burn thumb-sm visible-lg">
+          <img src="https://www.gravatar.com/avatar/cc670dfea2b7014d5cf443b2bca3c07d?s=128" class="img-rounded w-full" alt="">
+        </a>
+      </div>
+      <div class="media-body">
+        <h3 class="media-heading"><a href="https://github.com/xiaojkql" target="_blank"><span class="text-dark">覃缘</span><small class="ml-1x">Java开发工程师</small></a></h3>
+        <div>破釜沉舟，百二秦关终属楚。</div>
+      </div>
+    </figure>
+  </div>
+</div>
+
+
+    </div>
+  </article>
+  
+    
+  <section id="comments">
+  	
+           
+    
+  </section>
+
+
+  
+</div>
+
+  <nav class="bar bar-footer clearfix" data-stick-bottom>
+  <div class="bar-inner">
+  
+  <ul class="pager pull-left">
+    
+    
+    <li class="next">
+      <a href="/2021/03/28/rocketMQ/%E6%88%91%E7%90%86%E8%A7%A3%E7%9A%84RocketMQ%E2%80%94%E6%B6%88%E6%81%AF%E5%81%8F%E7%A7%BB%E9%87%8F%E7%AE%A1%E7%90%86%E5%88%86%E6%9E%90/" title="我理解的RocketMQ—消息偏移量管理分析"><span>下一篇&nbsp;&nbsp;</span><i class="icon icon-angle-right" aria-hidden="true"></i></a>
+    </li>
+    
+    
+    <li class="toggle-toc">
+      <a class="toggle-btn collapsed" data-toggle="collapse" href="#collapseToc" aria-expanded="false" title="文章目录" role="button">
+        <span>[&nbsp;</span><span>文章目录</span>
+        <i class="text-collapsed icon icon-anchor"></i>
+        <i class="text-in icon icon-close"></i>
+        <span>]</span>
+      </a>
+    </li>
+    
+  </ul>
+  
+  
+  
+  <div class="bar-right">
+    
+  </div>
+  </div>
+</nav>
+  
+
+
+</main>
+
+  <footer class="footer" itemscope itemtype="http://schema.org/WPFooter">
+	
+	
+    <ul class="social-links">
+    	
+        <li><a href="https://github.com/xiaojkql" target="_blank" title="Github" ><i class="icon icon-github"></i></a></li>
+        
+    </ul>
+
+    <div class="copyright">
+    	
+        <div class="publishby">
+        	Theme by <a href="https://github.com/cofess" target="_blank"> cofess </a>base on <a href="https://github.com/cofess/hexo-theme-pure" target="_blank">pure</a>.
+        </div>
+    </div>
+</footer>
+  <script src="//cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+<script>
+window.jQuery || document.write('<script src="js/jquery.min.js"><\/script>')
+</script>
+
+<script src="/js/plugin.min.js"></script>
+
+
+<script src="/js/application.js"></script>
+
+
+    <script>
+(function (window) {
+    var INSIGHT_CONFIG = {
+        TRANSLATION: {
+            POSTS: '文章',
+            PAGES: '页面',
+            CATEGORIES: '分类',
+            TAGS: '标签',
+            UNTITLED: '(未命名)',
+        },
+        ROOT_URL: '/',
+        CONTENT_URL: '/content.json',
+    };
+    window.INSIGHT_CONFIG = INSIGHT_CONFIG;
+})(window);
+</script>
+
+<script src="/js/insight.js"></script>
+
+
+
+
+
+
+   
+
+
+
+
+   
+    
+  <!-- <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css"> -->
+  <script src="//cdn.jsdelivr.net/npm/gitalk@1.4.0/dist/gitalk.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+  <script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '',
+    clientSecret: '',
+    repo: '',
+    owner: '',
+    admin: [''],
+    id: md5(location.pathname),
+    distractionFreeMode: true
+  })
+  gitalk.render('comments')
+  </script>
+
+      
+
+
+
+  <script src="//cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.3.5/dist/jquery.fancybox.min.js"></script>
+  <script>
+  //利用 FancyBox 实现点击图片放大
+  $(document).ready(function() {
+    $('article img').not('[hidden]').not('.panel-body img').each(function() {
+      var $image = $(this);
+      var imageCaption = $image.attr('alt');
+      var $imageWrapLink = $image.parent('a');
+      if ($imageWrapLink.length < 1) {
+        var src = this.getAttribute('src');
+        var idx = src.lastIndexOf('?');
+        if (idx != -1) {
+          src = src.substring(0, idx);
+        }
+        $imageWrapLink = $image.wrap('<a href="' + src + '"></a>').parent('a');
+      }
+      $imageWrapLink.attr('data-fancybox', 'images');
+      if (imageCaption) {
+        $imageWrapLink.attr('data-caption', imageCaption);
+      }
+    });
+    $().fancybox({
+      selector: '[data-fancybox="images"]',
+      hash: false,
+      loop: false,
+    });
+  });
+  </script>
+
+
+
+
+
+</body>
+</html>
